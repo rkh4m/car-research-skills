@@ -114,4 +114,4 @@ Design informed by [OpenVIN](https://github.com/FrancoisChastel/OpenVIN) (MIT), 
 
 ## License
 
-MIT (proposed).
+[MIT](LICENSE).
