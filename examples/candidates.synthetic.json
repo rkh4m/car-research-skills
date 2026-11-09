@@ -1,0 +1,50 @@
+[
+  {
+    "id": "syn-1", "year": 2016, "make": "Mazda", "model": "Mazda3", "trim": "i Sport", "condition": "used",
+    "price": 11495, "feesTotal": 895, "mileage": 80145, "distanceMi": 16, "mpg": 33,
+    "vin": "SYNTHETIC00000001", "vinCheck": { "checksumValid": true, "decodeOk": true },
+    "market": { "baseline": 13964, "comps": 10 }, "listing": { "daysOnMarket": 43 },
+    "history": { "source": "listing", "titleBrand": "clean", "accidents": 0, "owners": 1 },
+    "reliability": { "complaints": 103, "perYear": 9.5, "crashFireInjuryPerYear": 0.7, "severeShare": 0.54, "recalls": 6, "parkItRecalls": 1,
+      "reviewedClusters": [{ "label": "Infotainment system freeze and reboot", "componentCode": "ELECTRICAL SYSTEM", "complaintCount": 16 },
+                           { "label": "Parking brake caliper corrosion under recall", "componentCode": "PARKING BRAKE", "complaintCount": 14 }] },
+    "safety": { "ncapOverall": 5 }
+  },
+  {
+    "id": "syn-2", "year": 2020, "make": "Kia", "model": "Forte", "trim": "LXS", "condition": "used",
+    "price": 9995, "feesTotal": 895, "mileage": 87446, "distanceMi": 16, "mpg": 33,
+    "vin": "SYNTHETIC00000002", "vinCheck": { "checksumValid": true, "decodeOk": true },
+    "market": { "baseline": 11936, "comps": 10 }, "listing": { "daysOnMarket": 2 },
+    "history": { "source": "listing", "titleBrand": "clean", "accidents": 0, "owners": 2 },
+    "reliability": { "complaints": 78, "perYear": 11.4, "crashFireInjuryPerYear": 1.7, "severeShare": 0.65, "recalls": 0, "theftProne": true,
+      "reviewedClusters": [{ "label": "Engine knocking, oil loss, and stalling", "componentCode": "ENGINE", "complaintCount": 14 },
+                           { "label": "Transmission slipping and replacement", "componentCode": "POWER TRAIN", "complaintCount": 14 }] },
+    "safety": { "ncapOverall": 4 }
+  },
+  {
+    "id": "syn-3", "year": 2017, "make": "Honda", "model": "Civic", "trim": "LX", "condition": "used",
+    "price": 12000, "feesTotal": 0, "mileage": 75718, "distanceMi": 25, "mpg": 35,
+    "vin": "SYNTHETIC00000003", "vinCheck": { "checksumValid": true, "decodeOk": true },
+    "market": { "baseline": 15948, "comps": 20 }, "listing": { "daysOnMarket": 4 },
+    "history": { "source": "listing", "titleBrand": "clean", "owners": 4, "frameDamaged": true },
+    "reliability": { "complaints": 606, "perYear": 61.5, "crashFireInjuryPerYear": 3.4, "severeShare": 0.64, "recalls": 6 },
+    "safety": { "ncapOverall": 5 }
+  },
+  {
+    "id": "syn-4", "year": 2017, "make": "Toyota", "model": "Camry Hybrid", "trim": "XLE", "condition": "used", "fuelType": "hybrid",
+    "price": 12999, "feesTotal": 0, "mileage": 123000, "distanceMi": 12, "mpg": 40,
+    "vin": "SYNTHETIC00000004", "vinCheck": { "checksumValid": true, "decodeOk": true },
+    "market": { "baseline": 13888, "comps": 4 }, "listing": { "daysOnMarket": 62 },
+    "history": { "source": "listing", "titleBrand": "clean", "accidents": 0, "owners": 2 },
+    "reliability": { "complaints": 142, "perYear": 14.4, "crashFireInjuryPerYear": 3.4, "severeShare": 0.56, "recalls": 1 },
+    "safety": { "ncapOverall": 5 }
+  },
+  {
+    "id": "syn-5", "year": 2026, "make": "Toyota", "model": "Corolla", "trim": "LE", "condition": "used",
+    "price": 20495, "feesTotal": 799, "mileage": 14957, "distanceMi": 19, "mpg": 35,
+    "vin": "SYNTHETIC00000005", "vinCheck": { "checksumValid": true, "decodeOk": true },
+    "market": { "baseline": 23842, "comps": 12 }, "listing": { "daysOnMarket": 9 },
+    "history": { "source": "listing", "titleBrand": "clean", "accidents": 0 },
+    "safety": { "ncapOverall": 5 }
+  }
+]

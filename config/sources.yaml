@@ -1,0 +1,331 @@
+# Source registry. The policy engine refuses any access mode not listed here.
+# access_mode: api | mcp | assisted_browse | link_out | user_provided
+# tos_review: ok | restricted | prohibited | pending   (only "ok" permits assisted_browse)
+# robots_snapshot: generic "*" group unless noted; re-checked live at runtime regardless.
+snapshot_date: 2026-11-08
+
+defaults:
+  rate_limit: { min_interval_s: 12, jitter_s: 8, max_pages_per_session: 20, max_pages_per_day: 100 }
+  cache_ttl: { search: 24h, detail: 7d, robots: 24h, gov_api: 24h }
+  stop_on: [captcha, bot_challenge, login_wall, http_403, http_429_repeated]
+
+sources:
+  # ---------- Government / free data ----------
+  - id: nhtsa_vpic
+    capability: [vin_decode]
+    access_mode: api
+    base_url: https://vpic.nhtsa.dot.gov/api/vehicles/
+    cost: free
+    tos_review: ok
+    notes: Missing values mean "no data", not "feature absent".
+
+  - id: nhtsa_recalls
+    capability: [recalls]
+    access_mode: api
+    base_url: https://api.nhtsa.gov/recalls/recallsByVehicle
+    cost: free
+    tos_review: ok
+    notes: Model-year level. Fields include parkIt, parkOutSide, overTheAirUpdate.
+    field_notes_2026_11:
+      - Returns HTTP 400 with {"Count":0,"Message":"Results returned successfully","results":[]} when a model-year has no recalls; treat as zero, not an error (src/clients/nhtsa.ts).
+
+  - id: nhtsa_complaints
+    capability: [reliability]
+    access_mode: api
+    base_url: https://api.nhtsa.gov/complaints/complaintsByVehicle
+    cost: free
+    tos_review: ok
+    notes: Includes crash/fire/injury/death flags and component. Recent model years under-reported.
+
+  - id: nhtsa_ncap
+    capability: [safety]
+    access_mode: api
+    base_url: https://api.nhtsa.gov/SafetyRatings/
+    cost: free
+    tos_review: ok
+
+  - id: nhtsa_vin_recall_lookup
+    capability: [open_recalls_by_vin]
+    access_mode: link_out
+    url: https://www.nhtsa.gov/recalls
+    cost: free
+    tos_review: ok
+    notes: User performs the VIN lookup; agent records the result they report.
+
+  - id: fueleconomy_gov
+    capability: [tco_fuel]
+    access_mode: api
+    base_url: https://www.fueleconomy.gov/ws/rest/
+    cost: free
+    tos_review: ok
+
+  - id: eia_fuel_prices
+    capability: [tco_fuel]
+    access_mode: api
+    base_url: https://api.eia.gov/v2/
+    cost: free (API key, free registration)
+    tos_review: ok
+
+  - id: nicb_vincheck
+    capability: [theft, total_loss]
+    access_mode: link_out
+    url: https://www.nicb.org/vincheck
+    cost: free
+    tos_review: prohibited   # reCAPTCHA + terms forbid automated use
+    notes: Guided user step for finalists only.
+
+  - id: nmvtis
+    capability: [title_brands, odometer]
+    access_mode: link_out
+    url: https://vehiclehistory.bja.ojp.gov/
+    cost: paid (~$3-10 per VIN via approved providers)
+    tos_review: ok
+    paid: true
+    notes: Recommended for every finalist. Never scrape provider sites.
+
+  - id: iihs
+    capability: [safety]
+    access_mode: link_out
+    url: https://www.iihs.org/ratings
+    cost: free
+    tos_review: pending
+    notes: Check whether IIHS offers sanctioned programmatic access before automating.
+
+  # ---------- MCP servers ----------
+  - id: whichtrim
+    capability: [recalls, reliability, tsb, investigations, safety, tco_fuel, vin_decode]
+    access_mode: mcp
+    url: https://whichtrim.com/portal/mcp
+    cost: free (no key)
+    tos_review: ok
+    notes: Third-party republisher of NHTSA/EPA data, MY2016+. Cross-check counts with NHTSA direct.
+
+  - id: auto_dev
+    capability: [listings, vin_decode, photos]
+    access_mode: mcp
+    cost: free tier 1,000 calls/mo hard cap; paid plans $299+/mo + per-call data fees
+    tos_review: ok
+    notes: Count calls per run; report usage to user.
+
+  - id: marketcheck
+    capability: [listings, price_history, vin_history]
+    access_mode: api
+    cost: paid (per-call data fees)
+    tos_review: ok
+    paid: true
+    enabled_by_default: false
+
+  - id: carsxe
+    capability: [vin_specs, history, market_value]
+    access_mode: mcp
+    cost: paid subscription
+    tos_review: ok
+    paid: true
+    enabled_by_default: false
+
+  - id: cargurus_mcp
+    capability: [listings, deal_rating, history_summary, dealer_rating]
+    access_mode: mcp
+    url: https://mcp-apps.api.cargurus.com/chat-mcp/v1/stream
+    cost: free (official CarGurus connector)
+    tos_review: ok
+    tools_allowed: [vehicle-listing-search, vehicle-listing-detail]
+    notes: Max 20 results per search; detail gives VIN, options, owners, accidents, salvage, dealer rating. Primary listing source.
+    field_notes_2026_11:
+      - Connector-only (claude.ai directory). Direct HTTP to the endpoint returns 400, so scripts can't call it; results come through the agent.
+      - Search pads thin local results with out-of-area listings and repeats some IDs; filter by distance and dedupe by id.
+      - Detail batches of ~11 IDs produce 85–130k characters (mostly photo URLs); keep batches ≤ 10 and extract fields immediately.
+      - vehicleHistory has salvage, theftTitle, lemon, frameDamaged, accidentCount, ownerCount; history has daysAtDealer and daysOnCarGurus; price.differential is CarGurus's under/over-market dollars.
+      - vehicleCondition tells NEW from USED; current-model-year cars with miles are USED (ex-rental/loaner).
+
+  - id: dealer_direct
+    capability: [listings, new_below_msrp, itemized_fees, cpo]
+    access_mode: mcp
+    url: https://dealer-direct-mcp.web.app/mcp
+    cost: free
+    tos_review: ok
+    tools_allowed: [search_inventory, get_vehicle, list_dealers]
+    tools_blocked: [submit_lead, get_lead_status, start_shielded_inquiry, get_deal_thread, send_counter_offer, accept_deal_and_reveal, burn_proxy_thread]
+    notes: ~1.0M vehicles / 3,450 dealers / 50 states (2026-11-08). Blocked tools contact dealers or reveal buyer identity. Price fields can be misparsed; apply sanity checks.
+    field_notes_2026_11:
+      - distance_miles and radius filtering are unreliable (a dealer ~120 mi away reported 0; ~190 mi away reported 71.9). Always recompute from lat/lng.
+      - Thin coverage for $10–15k used sedans in at least one large metro (29 matches statewide, few inside 75 mi); treat as a supplement to CarGurus.
+      - Almost no new-car inventory near that metro (2 below-MSRP sedans within 75 mi).
+      - Cross-lists cars that also appear on CarGurus at different prices; dedupe and keep both prices.
+
+  - id: opendealer
+    capability: [listings, deal_score, price_history, days_on_lot, market_trends, suggested_apr, recalls, safety]
+    access_mode: mcp
+    url: https://mcp.opendealer.app/rpc
+    cost: free
+    tos_review: ok
+    notes: Strong analytics tools but small index (~1,900 vehicles, 2026-11-08). Use get_suggested_rates for APR baseline; deal/history tools only for vehicles it indexes.
+    field_notes_2026_11:
+      - get_suggested_rates returned used-car APRs of 7.2–12.0% by term and credit tier (60 mo, good credit = 8.5%). Labeled "not a credit offer"; say so in reports.
+
+  - id: wrench_pro
+    capability: [known_issues, maintenance_cost, recalls]
+    access_mode: mcp
+    url: https://mcp.wrench.pro/mcp
+    cost: free tier (some data "Pro only")
+    tos_review: ok
+    notes: Feeds reliability (reviewed known issues) and TCO (maintenance ranges, marked approximate).
+    field_notes_2026_11:
+      - get_known_issues takes {year, make, model} slugs and returns knownIssues.mode (reviewed | raw | none) plus knownIssues.clusters[] with label, componentCode, complaintCount, dateRange.
+      - Hybrids may not resolve on their own (e.g. "camry hybrid" → suggests "camry"); don't substitute the base model's issues without saying so.
+      - Reviewed clusters drive expected_repairs and the theft_prone flag in the scorecard.
+
+  - id: vehicle_recalls_batch
+    capability: [vin_decode, recalls]
+    access_mode: mcp
+    url: https://vehicle-recalls.zovo.one/mcp
+    cost: free
+    tos_review: ok
+    notes: Batch decode + model-year recalls for up to 50 VINs (park-it counts). NOT VIN-level remedy status.
+
+  - id: nhtsa_safety_mcp
+    capability: [recalls, complaints, investigations, safety, vin_decode]
+    access_mode: mcp
+    url: https://nhtsa.caseyjhand.com/mcp
+    cost: free
+    tos_review: ok
+    notes: Alternative to WhichTrim with defect-investigation search; cross-check source of record.
+
+  - id: marketcheck_incentives
+    capability: [oem_incentives]
+    access_mode: mcp
+    url: https://mc-api.marketcheck.com/mcp
+    cost: paid (per-call)
+    tos_review: ok
+    paid: true
+    enabled_by_default: false
+    notes: search_oem_incentives_by_zip / search_oem_incentives — cash, APR, lease, MSA-level, validity dates. Docs MCP (free) at https://developers.marketcheck.com/api/docs-mcp.
+
+  # ---------- Incentive / deals pages (robots checked 2026-11-08) ----------
+  - id: oem_offer_pages
+    capability: [oem_incentives]
+    access_mode: link_out        # promote to assisted_browse per OEM after ToS review
+    urls:
+      toyota: https://www.toyota.com/deals-incentives/      # /local-specials* disallowed
+      hyundai: https://www.hyundaiusa.com/us/en/special-offers
+      kia: https://www.kia.com/us/en/offers
+      ford: https://www.ford.com/shopping-tools/special-offers/
+      nissan: https://www.nissanusa.com/shopping-tools/current-offers.html
+      mazda: https://www.mazdausa.com/shopping-tools/special-offers
+      subaru: https://www.subaru.com/offers.html
+      honda: https://automobiles.honda.com/tools/current-offers   # robots.txt Access Denied → link-out only
+      chevrolet: https://www.chevrolet.com/current-deals            # robots.txt Access Denied → link-out only
+    robots_snapshot: "allowed for listed paths except Honda/Chevrolet (blocked) and Toyota /local-specials*"
+    tos_review: pending
+
+  - id: incentive_aggregators
+    capability: [oem_incentives]
+    access_mode: link_out
+    urls:
+      edmunds: https://www.edmunds.com/car-incentives/
+      truecar: https://www.truecar.com/deals/
+      carsdirect: https://www.carsdirect.com/deals
+    robots_snapshot: "allowed"
+    tos_review: pending
+    notes: Cite and link; do not republish their content.
+
+  - id: dealer_specials_pages
+    capability: [dealer_specials]
+    access_mode: assisted_browse
+    tos_review: ok               # per-dealer robots.txt enforced at runtime
+    notes: Typical paths /specials, /new-specials, /used-specials; read fine print for conditional rebates.
+
+  # ---------- Evaluated and NOT used ----------
+  - id: avoid_list
+    access_mode: none
+    entries:
+      - { name: "Facebook Marketplace MCPs (e.g. jdcodes1/facebook-marketplace-mcp)", reason: "Reuse the user's logged-in session cookies; violates FB ToS and risks the user's account" }
+      - { name: "Craigslist MCPs", reason: "Craigslist ToS prohibits automated access" }
+      - { name: "com.thenextgennexus/automotive-mcp-server (Cars.com via Apify proxy)", reason: "Unofficial scraping of a site that serves bot challenges; needs Apify account" }
+      - { name: "Copart/IAA auction MCPs (autocarena, apibara)", reason: "Salvage-auction inventory; conflicts with branded-title gate; bidding tools" }
+      - { name: "vehiclehistorybyvin MCP", reason: "Opens paid checkout; only with explicit per-purchase approval" }
+
+  - id: carfax_autocheck
+    capability: [accidents, service_records, owners, title]
+    access_mode: user_provided   # dealer-provided free link or user-purchased PDF
+    cost: paid unless dealer provides
+    tos_review: restricted       # reports are licensed to purchaser; never store publicly
+    paid: true
+
+  # ---------- Listing marketplaces ----------
+  - id: dealer_sites
+    capability: [listings]
+    access_mode: assisted_browse
+    cost: free
+    tos_review: ok               # per-dealer robots.txt still enforced at runtime
+    notes: Prefer schema.org Vehicle/Car JSON-LD and sitemap.xml; skip any dealer whose robots disallows inventory paths.
+
+  - id: autotrader
+    capability: [listings]
+    access_mode: link_out        # candidate for assisted_browse after ToS review
+    robots_snapshot: "*: /cars-for-sale/all-cars disallowed; Claude-User group: only srp-dark, vehicle-dark, *.js disallowed"
+    tos_review: pending
+    notes: Price tiles include dealer fees; results mix paid placements; search capped ~300 results.
+
+  - id: cargurus
+    capability: [listings, deal_rating]
+    access_mode: link_out
+    robots_snapshot: "/Cars/search, /Cars/inventorylisting/, /Cars/api/ disallowed"
+    tos_review: pending
+    notes: Use the official CarGurus MCP (cargurus_mcp) instead of browsing the site.
+
+  - id: cars_com
+    capability: [listings]
+    access_mode: link_out
+    robots_snapshot: "robots.txt served behind Cloudflare challenge (403)"
+    tos_review: pending
+
+  - id: edmunds
+    capability: [listings, reviews]
+    access_mode: link_out
+    robots_snapshot: "/inventory/srp.html?*, /used-cars-for-sale/i/*, /api/, */vin/* disallowed; GPTBot: Disallow /"
+    tos_review: pending
+
+  - id: carvana
+    capability: [listings]
+    access_mode: link_out
+    robots_snapshot: "/inventory/, /search/, /api/ disallowed"
+    tos_review: pending
+
+  - id: truecar
+    capability: [listings]
+    access_mode: link_out
+    robots_snapshot: "/used-cars-for-sale/listing/*, /used/, /api/ disallowed"
+    tos_review: pending
+
+  - id: carmax
+    capability: [listings]
+    access_mode: link_out
+    robots_snapshot: "robots.txt returns 403"
+    tos_review: pending
+
+  - id: craigslist
+    capability: [listings]
+    access_mode: link_out
+    robots_snapshot: "permissive"
+    tos_review: prohibited       # ToS forbids automated access
+    notes: User may paste listing URLs/text.
+
+  - id: facebook_marketplace
+    capability: [listings]
+    access_mode: link_out
+    tos_review: prohibited       # login wall; automated access forbidden
+    notes: User may paste listing text/screenshots.
+
+  - id: autotempest
+    capability: [listings_aggregator]
+    access_mode: link_out
+    robots_snapshot: "no rules; asks to respect noindex / X-Robots-Tag"
+    tos_review: pending
+
+  - id: kbb
+    capability: [valuation_reference]
+    access_mode: link_out
+    robots_snapshot: "/*?listingid=, */recall*vin= disallowed"
+    tos_review: pending
+    notes: Values are reference only; do not republish.

@@ -1,0 +1,36 @@
+{
+  "mcpServers": {
+    "cargurus": {
+      "type": "http",
+      "url": "https://mcp-apps.api.cargurus.com/chat-mcp/v1/stream"
+    },
+    "dealer-direct": {
+      "type": "http",
+      "url": "https://dealer-direct-mcp.web.app/mcp"
+    },
+    "opendealer": {
+      "type": "http",
+      "url": "https://mcp.opendealer.app/rpc"
+    },
+    "whichtrim": {
+      "type": "http",
+      "url": "https://whichtrim.com/portal/mcp"
+    },
+    "wrench": {
+      "type": "http",
+      "url": "https://mcp.wrench.pro/mcp"
+    },
+    "vehicle-recalls": {
+      "type": "http",
+      "url": "https://vehicle-recalls.zovo.one/mcp"
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"]
+    },
+    "auto-dev": {
+      "command": "auto",
+      "args": ["--mcp"]
+    }
+  }
+}

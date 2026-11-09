@@ -1,0 +1,49 @@
+# Copy OUTSIDE the repo (e.g. ~/.car-research/profile.yaml). Never commit a real profile.
+zip: "00000"
+radius_mi: 75
+
+budget:
+  basis: price            # price | out_the_door
+  target_min: 10000
+  target_max: 15000
+  stretch_max: 35000      # only "exceptional" deals (see scoring/scorecard.yaml budget_rule)
+
+needs:
+  body_styles: [sedan, hatchback, compact_suv]
+  must_have: []           # e.g. [awd, apple_carplay, third_row]
+  nice_to_have: [backup_camera, blind_spot_monitoring]
+  seats_min: 5
+
+conditions: [used, cpo]   # add "new" to let year-end new-car deals compete via the stretch rule
+
+payment:
+  method: cash            # cash | finance
+  expected_apr: null      # null = national average (OpenDealer get_suggested_rates)
+  term_months: 60
+  down_payment: 0
+  sales_tax_rate: 0       # your state's vehicle sales tax, e.g. 0.0415
+
+incentive_eligibility:    # conditional rebates are only applied when true
+  military: false
+  recent_college_grad: false
+  first_responder: false
+  loyalty_brands: []      # brands you currently own (loyalty offers)
+  conquest_brands: []     # brands you'd trade from (conquest offers)
+
+usage:
+  annual_miles: 12000
+  fuel_price_override: null   # $/gal; null = use EIA regional average
+
+limits:
+  max_mileage: 130000
+  min_year: null              # null = derived from budget
+  allow_branded_title: false  # salvage/rebuilt/flood stay excluded unless true
+  allow_structural_damage: false  # frame damage / airbag deployment stay excluded unless true
+  seller_types: [dealer, private]
+
+data:
+  paid_sources_enabled: false # paid reports/APIs always need per-purchase approval anyway
+  max_api_calls_per_run: 40
+  ua_token: Claude-User       # robots.txt group evaluated for user-initiated browsing
+
+shortlist_size: 5

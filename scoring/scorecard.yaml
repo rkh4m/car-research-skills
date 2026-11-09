@@ -1,0 +1,255 @@
+# Scorecard v0.1 — order: gates → criterion scores (0-100) → weighted sum → confidence → budget rule → rank
+# overall = Σ(weight_i × score_i) / 100, with unknown criteria scored at `unknown_score` (never as good).
+version: 0.1
+unknown_score: 50
+
+# ---------------------------------------------------------------------------
+# Profiles: weights must sum to 100. Profile is chosen per listing by price.
+# ---------------------------------------------------------------------------
+profiles:
+  target:            # price within budget.target_min..target_max (default $10k-15k: older, higher-mileage cars)
+    weights:
+      deal_vs_market: 16
+      reliability: 18
+      title_status: 12
+      accident_damage: 11
+      total_cost_of_ownership: 13
+      safety_rating: 8
+      recalls: 7
+      service_records: 7
+      owner_count: 3
+      mileage_for_age: 5
+  stretch:           # price in (target_max, stretch_max], default $15k-35k: deal quality must carry it
+    weights:
+      deal_vs_market: 22
+      reliability: 15
+      title_status: 12
+      accident_damage: 12
+      total_cost_of_ownership: 10
+      safety_rating: 9
+      recalls: 6
+      service_records: 6
+      owner_count: 4
+      mileage_for_age: 4
+  new_vehicle:       # condition == new; history criteria don't apply. Always a stretch car under default budgets.
+    weights:
+      deal_vs_market: 35
+      reliability: 22
+      total_cost_of_ownership: 23
+      safety_rating: 15
+      recalls: 5
+
+# ---------------------------------------------------------------------------
+# Price normalization (see docs/deals-and-incentives.md). deal_vs_market scores effective_price.
+# ---------------------------------------------------------------------------
+effective_price:
+  formula: >-
+    advertised_price + mandatory_dealer_fees + unqualified_conditional_rebates_in_ad
+    - qualifying_cash_incentives_not_applied - pv_financing_savings
+  pv_financing_savings: only when payment.method == finance; choose better of cash-back vs special APR
+  conditional_rebates: applied only when buyer.incentive_eligibility says true
+  incentive_must_have: [source_url, valid_through, region_or_zip]   # otherwise ignored, never assumed
+sanity_checks:
+  - { id: price_data_suspect, when: "condition == new and price < 0.70 * msrp", action: exclude_until_verified }
+  - { id: price_data_suspect, when: "condition != new and price < 0.50 * baseline", action: exclude_until_verified }
+  - { id: incentive_data_suspect, when: "incentive_total > 0.25 * msrp", action: ignore_incentive }
+  - { id: source_price_conflict, when: "max_source_price > 1.10 * min_source_price", action: score_higher_price }
+
+# ---------------------------------------------------------------------------
+# Hard gates: any hit excludes the car from the shortlist (shown under "Excluded" with reason).
+# ---------------------------------------------------------------------------
+gates:
+  - id: branded_title
+    when: title_status in [salvage, flood, junk, non_repairable, rebuilt, reconstructed]
+    unless: profile.allow_branded_title == true and title_status in [rebuilt, reconstructed]
+  - id: frame_or_structural_damage
+    when: frame_damaged == true or structural_damage == true or airbag_deployed == true
+    unless: profile.allow_structural_damage == true
+    note: Added after the first live run, where a frame-damaged car scored 68 on price alone and would have made a shortlist.
+  - id: theft_record
+    when: nicb.theft_record == true and nicb.recovered != true
+  - id: odometer_problem
+    when: odometer_brand in [not_actual, exceeds_mechanical_limits] or odometer_rollback_suspected == true
+  - id: unremedied_do_not_drive_recall
+    when: vin_open_park_it_recalls > 0 and remedied != true
+    note: Eligible again once the dealer documents the remedy.
+  - id: vin_unverifiable
+    when: vin_present == false or vin_checks_failed == true    # checks_failed = checksum invalid AND decode failed
+    note: Shown in a "Needs VIN" list instead of being silently dropped.
+  - id: vin_identity_mismatch
+    when: vin_year_mismatch == true or vin_model_mismatch == true
+  - id: over_budget
+    when: price > budget.stretch_max
+  - id: over_mileage
+    when: mileage > limits.max_mileage
+  - id: missing_must_have
+    when: missing_must_have_count > 0
+
+# Condition syntax (evaluated by src/scoring/expr.ts): `fact OP value` joined by `and` / `or` (no parentheses).
+# OP: >= <= > < == != ; `fact in [a, b]`; value may be a number, true/false, a bare word, another fact, or `N * fact`.
+# A missing fact makes a comparison false, except `!=`, which is true.
+
+# ---------------------------------------------------------------------------
+# Criteria: each returns 0-100 or `unknown`. `known_if` controls confidence.
+# ---------------------------------------------------------------------------
+criteria:
+  deal_vs_market:
+    input: pct_vs_baseline = (baseline - price_normalized) / baseline   # positive = below market
+    baseline: weighted median of comps (similarity²), MAD outliers removed, mileage-adjusted
+    bands:                       # pct_vs_baseline → score
+      - { min: 0.15, score: 100 }
+      - { min: 0.10, score: 90 }
+      - { min: 0.05, score: 78 }
+      - { min: -0.05, score: 60 }
+      - { min: -0.10, score: 40 }
+      - { min: -0.20, score: 20 }
+      - { min: -1.00, score: 5 }
+    new_vehicle_input: pct_below_msrp = (msrp - effective_price) / msrp, scored with the same bands
+    modifiers:
+      - { when: days_on_market >= 45, add: 3, note: "negotiation leverage" }
+      - { when: days_on_market >= 60, add: 2, note: "aged inventory; dealer under pressure to move it" }
+      - { when: price_drops >= 2, add: 2, note: "seller motivated" }
+      - { when: "outgoing_model_year == true", add: 2, note: "prior model year still on lot; extra rebates likely" }
+      - { when: "incentive_expires_within_days <= 14", add: 0, note: "offer expires soon; confirm before relying on it" }
+      - { when: "run_month in [11, 12]", add: 0, note: "year-end: month/quarter/year targets; ask for best OTD in writing" }
+      - { when: local_median_vs_national >= 0.08, add: 0, note: "region runs hot; widen radius" }
+    red_flags:
+      - { when: pct_vs_baseline >= 0.25, flag: too_good_to_be_true, note: "verify title/VIN before trusting" }
+      - { when: price_is_finance_only == true, flag: finance_only_price }
+      - { when: ad_price_includes_conditional_rebates == true, flag: conditional_price, note: "headline price assumes rebates/financing/trade-in you may not qualify for" }
+    known_if: comps >= 6
+    partial_if: { comps_between: [3, 5], confidence_factor: 0.5 }
+
+  reliability:
+    input: model-year composite vs segment peers in this run
+    components:                  # each 0-100, blended by share
+      complaint_severity_percentile: 0.55   # crash/fire/injury/death weighted; per year-on-market; 100 = best in cohort
+      powertrain_electrical_share: 0.20     # lower share of engine/transmission/electrical complaints = higher
+      investigations_and_tsbs: 0.10         # open PE/EA investigation −30; warranty extension still in force +10
+      owner_report_evidence: 0.15           # grade A/B patterns only; grade C anecdotes never move the score
+    user_rating_override:        # optional Consumer Reports-style 1-5 the user supplies; never scraped
+      blend: 0.30
+      map: { 5: 100, 4: 80, 3: 60, 2: 35, 1: 15 }
+    red_flags:
+      - { when: model_age_years < 3, flag: immature_reliability_data }
+      - { when: failure_mileage_cluster contains current_mileage ± 15000, flag: entering_known_failure_window }
+    known_if: complaint data available for model year
+    data_rules:
+      - "zero complaints but recalls > 0 → unknown (NHTSA likely files the model under another name, e.g. a hybrid under its base model)"
+      - "raw counts are not sales-normalized; high-volume models look worse — report this caveat whenever comparing across models"
+      - "owner_report_evidence uses reviewed clusters only; engine/transmission failure in the top 2 clusters scores <= 30"
+
+  title_status:
+    map: { clean: 100, lemon_buyback: 20, rebuilt: 25, reconstructed: 25, unknown: unknown }
+    known_if: source in [nmvtis, carfax, autocheck]   # seller claim alone = unknown
+    partial_if: { source: listing_vehicle_history, confidence_factor: 0.5 }   # e.g. CarGurus vehicleHistory salvage/theft/lemon flags
+    red_flags:
+      - { when: title_state_changes >= 2 within 24 months, flag: possible_title_washing }
+
+  accident_damage:
+    map:
+      none_reported: 90          # not 100: no report sees unreported accidents
+      minor: 70
+      moderate: 45
+      severe: 15                 # structural, frame, airbag deployment
+      unknown: unknown
+    red_flags:
+      - { when: airbag_deployed or structural_damage, flag: structural_or_airbag_damage }
+    known_if: history report reviewed
+
+  owner_count:
+    map: { 1: 100, 2: 85, 3: 65, 4: 45, "5+": 25, unknown: unknown }
+    modifiers:
+      - { when: "usage in [rental, fleet]", add: -15, flag: fleet_or_rental_use }
+      - { when: owners >= 3 and model_age_years <= 5, add: -10, flag: rapid_ownership_turnover }
+
+  service_records:
+    input: records per 12 months / per 10k miles from history report or seller documents
+    map:
+      regular: 100               # ≥ 1 entry per 12 mo or 10k mi
+      some: 70
+      gaps_over_24_months: 40
+      none_on_report: 30         # report exists but shows no service
+      unknown: unknown           # no report at all
+    red_flags:
+      - { when: gaps_over_24_months, flag: long_service_gap }
+
+  recalls:
+    vin_verified:                # user completed NHTSA VIN lookup
+      open_count_map: { 0: 100, 1: 75, 2: 55, "3+": 35 }
+    model_year_only:             # VIN status unknown → capped, partially known
+      max_score: 70
+      severity_penalty: { park_it_or_outside: -30, fire_risk: -20, other: -5 }
+      confidence_factor: 0.5
+
+  total_cost_of_ownership:
+    input: tco_5yr = effective_price + sales_tax + financing_interest + fuel + insurance_band_mid + maintenance_estimate + expected_repairs
+    fuel: EPA combined mpg (best-mpg engine option unless trim/engine known) × annual_miles × regional $/gal
+    financing_interest: amortized on (effective_price × (1 + sales_tax) − down_payment) at buyer APR or national average
+    horizon_years: 5
+    insurance: band by vehicle class & age; replaced by user quote when given
+    insurance_default_annual_usd: 1800      # placeholder band until class-based bands or a user quote exist
+    insurance_modifiers:
+      - { when: theft_prone_model_year == true, multiply: 1.25, flag: theft_prone, note: "get a quote before buying" }
+    maintenance: age/mileage curve by make tier (labelled estimate)
+    maintenance_model: { base_annual_usd: 500, per_1k_mi_over: 7, over_mi: 60000, cap_annual_usd: 1800 }
+    expected_repairs:                       # REQUIRED — without it cheap, failure-prone cars outrank reliable ones
+      source: reviewed known-issue clusters (Wrench.Pro mode=reviewed) + NHTSA component shares
+      # First matching non-additive rule sets the base reserve; additive rules stack on top.
+      rule:
+        - { id: engine_or_transmission_failure_top2, when: "top-2 reviewed clusters include engine or transmission failure", reserve_usd: 3000 }
+        - { id: powertrain_cluster_10plus, when: "any reviewed powertrain/engine cluster with >= 10 complaints", reserve_usd: 1500 }
+        - { id: default, otherwise: true, reserve_usd: 500 }
+        - { id: hybrid_high_mileage, when: "hybrid and mileage >= 120000", reserve_usd: 1500, additive: true, note: "battery/inverter health check in PPI" }
+      label: "repair reserve (estimate)"
+    scoring: 100 - percentile_within_run_cohort   # cheapest to own = 100
+    known_if: fuel and maintenance estimates available
+
+  safety_rating:
+    ncap_overall_map: { 5: 100, 4: 80, 3: 55, 2: 30, 1: 15, not_rated: unknown }
+    modifiers:
+      - { when: iihs_top_safety_pick == true, add: 10, cap: 100 }
+      - { when: has_automatic_emergency_braking == true, add: 5, cap: 100 }
+
+  mileage_for_age:
+    input: ratio = mileage / (age_years × 12000)
+    bands:
+      - { max: 0.8, score: 100 }
+      - { max: 1.0, score: 85 }
+      - { max: 1.2, score: 65 }
+      - { max: 1.5, score: 40 }
+      - { max: 99, score: 20 }
+
+# ---------------------------------------------------------------------------
+# Confidence: share of weight backed by known data (partial criteria count × factor).
+# ---------------------------------------------------------------------------
+confidence:
+  formula: Σ(weight_i × known_factor_i) / 100     # known=1, partial=factor, unknown=0
+  min_for_shortlist: 0.60
+  labels: { high: 0.80, medium: 0.60, low: 0.0 }
+
+# ---------------------------------------------------------------------------
+# Budget rule: stretch-budget cars must be exceptional to appear.
+# ---------------------------------------------------------------------------
+budget_rule:
+  target_range: profile.budget.target_min..profile.budget.target_max
+  stretch_range: (profile.budget.target_max, profile.budget.stretch_max]
+  stretch_requires:
+    deal_vs_market: ">= 90"      # ≥ ~10% under a solid baseline
+    overall: ">= 80"
+    reliability: ">= 70"
+    confidence: ">= 0.70"
+  stretch_max_slots: 2           # of the shortlist
+  label: "STRETCH — exceptional deal above target budget"
+
+# ---------------------------------------------------------------------------
+# Shortlist & rating bands
+# ---------------------------------------------------------------------------
+shortlist:
+  size: 5
+  min_overall: 65
+  tie_breakers: [confidence, deal_vs_market, reliability, distance_mi]
+rating_bands:
+  excellent: 85
+  strong: 75
+  acceptable: 65
