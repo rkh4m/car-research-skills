@@ -9,28 +9,30 @@ unknown_score: 50
 profiles:
   target:            # price within budget.target_min..target_max (default $10k-15k: older, higher-mileage cars)
     weights:
-      deal_vs_market: 16
-      reliability: 18
-      title_status: 12
-      accident_damage: 11
-      total_cost_of_ownership: 13
-      safety_rating: 8
-      recalls: 7
-      service_records: 7
-      owner_count: 3
-      mileage_for_age: 5
-  stretch:           # price in (target_max, stretch_max], default $15k-35k: deal quality must carry it
-    weights:
-      deal_vs_market: 22
-      reliability: 15
-      title_status: 12
-      accident_damage: 12
-      total_cost_of_ownership: 10
-      safety_rating: 9
+      deal_vs_market: 14
+      reliability: 16
+      title_status: 11
+      accident_damage: 10
+      total_cost_of_ownership: 12
+      safety_rating: 7
       recalls: 6
       service_records: 6
-      owner_count: 4
-      mileage_for_age: 4
+      owner_count: 3
+      mileage_for_age: 2
+      absolute_mileage: 13
+  stretch:           # price in (target_max, stretch_max], default $15k-35k: deal quality must carry it
+    weights:
+      deal_vs_market: 20
+      reliability: 14
+      title_status: 11
+      accident_damage: 11
+      total_cost_of_ownership: 9
+      safety_rating: 8
+      recalls: 5
+      service_records: 5
+      owner_count: 3
+      mileage_for_age: 2
+      absolute_mileage: 12
   new_vehicle:       # condition == new; history criteria don't apply. Always a stretch car under default budgets.
     weights:
       deal_vs_market: 35
@@ -201,6 +203,7 @@ criteria:
         - { id: powertrain_cluster_10plus, when: "any reviewed powertrain/engine cluster with >= 10 complaints", reserve_usd: 1500 }
         - { id: default, otherwise: true, reserve_usd: 500 }
         - { id: hybrid_high_mileage, when: "hybrid and mileage >= 120000", reserve_usd: 1500, additive: true, note: "battery/inverter health check in PPI" }
+        - { id: over_100k_wear, when: "mileage > 100000", reserve_usd: 1000, additive: true, note: "suspension, mounts, seals and other wear items come due past 100k" }
       label: "repair reserve (estimate)"
     scoring: 100 - percentile_within_run_cohort   # cheapest to own = 100
     known_if: fuel and maintenance estimates available
@@ -210,6 +213,14 @@ criteria:
     modifiers:
       - { when: iihs_top_safety_pick == true, add: 10, cap: 100 }
       - { when: has_automatic_emergency_braking == true, add: 5, cap: 100 }
+
+  absolute_mileage:
+    # Odometer miles alone, independent of age. Gentle decline to 100k, steep after:
+    # past ~100k wear items (suspension, mounts, seals, transmission, timing components) come due together.
+    # Score is linearly interpolated between [miles, score] points; beyond the last point it stays at the last score.
+    curve: [[0, 100], [40000, 100], [60000, 92], [80000, 80], [100000, 62], [110000, 35], [120000, 22], [130000, 12], [150000, 0]]
+    red_flags:
+      - { when: mileage > 100000, flag: high_mileage_over_100k, note: "past 100k: budget for wear items and inspect suspension, mounts, transmission" }
 
   mileage_for_age:
     input: ratio = mileage / (age_years × 12000)

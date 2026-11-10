@@ -218,6 +218,22 @@ const scoreMileage = (sc: Scorecard, v: VehicleRecord, p: BuyerProfile, ctx: Run
   return { score: s, known: 1, evidence: `${Math.round(v.mileage / age).toLocaleString()} mi/yr over ${age.toFixed(1)} yrs` };
 };
 
+/** Linear interpolation over [miles, score] points; flat beyond the ends. */
+export const interpolateCurve = (curve: Array<[number, number]>, x: number) => {
+  if (x <= curve[0]![0]) return curve[0]![1];
+  for (let i = 1; i < curve.length; i++) {
+    const [x1, y1] = curve[i]!, [x0, y0] = curve[i - 1]!;
+    if (x <= x1) return y0 + ((y1 - y0) * (x - x0)) / (x1 - x0);
+  }
+  return curve[curve.length - 1]![1];
+};
+
+const scoreAbsoluteMileage = (sc: Scorecard, v: VehicleRecord, facts: Facts, flags: string[], notes: string[]) => {
+  const cfg = sc.criteria.absolute_mileage;
+  for (const r of cfg.red_flags) if (r.flag && tryEvaluate(r.when, facts)) { flags.push(r.flag); if (r.note) notes.push(r.note); }
+  return { score: Math.round(interpolateCurve(cfg.curve, v.mileage)), known: 1, evidence: `${v.mileage.toLocaleString()} mi on the odometer` };
+};
+
 export const computeTco = (sc: Scorecard, v: VehicleRecord, p: BuyerProfile, ctx: RunContext, facts: Facts, flags: string[]): TcoBreakdown | null => {
   if (!v.mpg) return null;
   const cfg = sc.criteria.total_cost_of_ownership;
@@ -247,6 +263,7 @@ export const computeTco = (sc: Scorecard, v: VehicleRecord, p: BuyerProfile, ctx
     engine_or_transmission_failure_top2: hasTopFailureCluster(clusters),
     powertrain_cluster_10plus: hasLargePowertrainCluster(clusters),
     hybrid_high_mileage: (v.fuelType === "hybrid" || v.fuelType === "plug_in_hybrid") && v.mileage >= 120000,
+    over_100k_wear: v.mileage > 100000,
     default: true,
   };
   const rules = cfg.expected_repairs.rule;
@@ -277,6 +294,7 @@ const scoreOne = (sc: Scorecard, v: VehicleRecord, p: BuyerProfile, ctx: RunCont
     safety_rating: scoreSafety(sc, v, facts),
     recalls: scoreRecalls(sc, v, flags),
     mileage_for_age: scoreMileage(sc, v, p, ctx),
+    absolute_mileage: scoreAbsoluteMileage(sc, v, facts, flags, notes),
   };
   return { gates, flags: [...new Set(flags)], notes: [...new Set(notes)], criteria, tco };
 };

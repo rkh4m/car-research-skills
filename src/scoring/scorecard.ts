@@ -77,6 +77,11 @@ export const ScorecardSchema = z.object({
     }),
     safety_rating: z.object({ ncap_overall_map: ScoreMap, modifiers: z.array(Conditional) }),
     mileage_for_age: z.object({ bands: z.array(z.object({ max: z.number(), score: z.number() })).min(1) }),
+    absolute_mileage: z.object({
+      curve: z.array(z.tuple([z.number().nonnegative(), z.number().min(0).max(100)])).min(2)
+        .refine(c => c.every((p, i) => i === 0 || p[0] > c[i - 1]![0]), { message: "curve miles must be strictly increasing" }),
+      red_flags: z.array(Conditional),
+    }),
   }),
   confidence: z.object({ min_for_shortlist: z.number() }),
   budget_rule: z.object({

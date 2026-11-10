@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const CRITERIA = [
   "deal_vs_market", "reliability", "title_status", "accident_damage", "total_cost_of_ownership",
-  "safety_rating", "recalls", "service_records", "owner_count", "mileage_for_age",
+  "safety_rating", "recalls", "service_records", "owner_count", "mileage_for_age", "absolute_mileage",
 ] as const;
 export type CriterionId = (typeof CRITERIA)[number];
 export type ProfileId = "target" | "stretch" | "new_vehicle";

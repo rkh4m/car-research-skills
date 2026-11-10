@@ -18,7 +18,7 @@ test("every gate and unless condition is expressible by the evaluator", () => {
 });
 
 test("weights that don't sum to 100 are rejected", () => {
-  const text = readFileSync(DEFAULT_SCORECARD_PATH, "utf8").replace("deal_vs_market: 16", "deal_vs_market: 20");
+  const text = readFileSync(DEFAULT_SCORECARD_PATH, "utf8").replace("deal_vs_market: 14", "deal_vs_market: 20");
   assert.throws(() => parseScorecard(text), /sum to 100/);
 });
 

@@ -42,9 +42,36 @@ test("live-run case: cheap, failure-prone, theft-prone car costs more to own tha
   assert.ok(reliable.criteria.reliability.score > cheap.criteria.reliability.score);
 });
 
-test("hybrid over 120k miles adds the battery reserve on top of the base reserve", () => {
+test("hybrid over 120k miles adds the battery reserve and the over-100k wear reserve on top of the base", () => {
   const r = run([car({ id: "hyb", fuelType: "hybrid", mileage: 123000, mpg: 40 })]);
-  assert.equal(byId(r, "hyb").tco!.repairReserve, 500 + 1500);
+  assert.equal(byId(r, "hyb").tco!.repairReserve, 500 + 1500 + 1000);
+});
+
+test("absolute mileage: gentle to 100k, steep after, smooth across band points", () => {
+  const r = run([60000, 80145, 100000, 110000, 125000].map(m => car({ id: `m${m}`, mileage: m })));
+  const s = (m: number) => byId(r, `m${m}`).criteria.absolute_mileage.score;
+  assert.equal(s(60000), 92);
+  assert.equal(s(80145), 80, "145 miles past a point barely moves the score");
+  assert.equal(s(100000), 62);
+  assert.equal(s(110000), 35, "first 10k past 100k costs 27 points");
+  assert.equal(s(125000), 17);
+  assert.ok(!byId(r, "m100000").flags.includes("high_mileage_over_100k"));
+  assert.ok(byId(r, "m110000").flags.includes("high_mileage_over_100k"));
+  assert.equal(byId(r, "m110000").tco!.repairReserve, 500 + 1000);
+});
+
+test("a cheaper car past 100k ranks below an otherwise identical car at 80k", () => {
+  const r = run([
+    car({ id: "low", mileage: 80000, price: 12000, market: { baseline: 13000, comps: 10 } }),
+    car({ id: "high", mileage: 120000, price: 10500, market: { baseline: 11000, comps: 10 } }),
+  ]);
+  assert.equal(r.ranked[0]!.vehicle.id, "low");
+  assert.ok(byId(r, "low").overall - byId(r, "high").overall >= 5);
+});
+
+test("absolute mileage carries no weight for new cars", () => {
+  const r = run([car({ id: "new", condition: "new", year: 2026, price: 31000, feesTotal: 0, mileage: 5, market: { msrp: 36000, comps: 0 }, history: undefined })]);
+  assert.equal(byId(r, "new").criteria.absolute_mileage.weight, 0);
 });
 
 test("live-run case: a current-model-year car with miles is scored as used/stretch, not new", () => {

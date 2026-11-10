@@ -36,6 +36,17 @@ The orchestrator workflow was run end to end for a real buyer: used sedans and h
 | CarGurus detail batches overflowed tool output (85–130k chars) | Batch ≤ 10 and extract fields immediately |
 | Raw complaint counts penalize best-selling models | Caveat required in reports; sales normalization added to the backlog |
 
+## Buyer feedback (2026-11-09): mileage over 100k should hurt much more
+
+The buyer felt the original scorecard was too lenient on high-mileage cars. Mileage only counted through `mileage_for_age` (weight 5), so a 120k-mile car with "normal" miles per year scored fine. Changes:
+
+- **New `absolute_mileage` criterion** (weight 13 target / 12 stretch / 0 new). It interpolates over a curve that declines gently to 100k (80k → 80, 100k → 62), then steeply (110k → 35, 120k → 22, 130k → 12). `mileage_for_age` drops to weight 2.
+- **New additive repair reserve** `over_100k_wear` (+$1,000) and a red flag `high_mileage_over_100k`.
+
+On the live-run listings, the top pick (80k) stayed #1, while the 111k–125k Mazda3s and the 114k Prius fell 4–8 places. Sub-100k Mazda3 hatchbacks moved into the top 6.
+
+Side effect to watch: a sub-90k car with reviewed engine/transmission issues (2020 Forte, 87k) now ranks #2. The repair reserve still prices that risk in TCO, but low mileage now outweighs it in the overall score.
+
 ## Open questions
 
 - **Sales normalization:** is there a free, citable source of annual US sales by model?
