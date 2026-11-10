@@ -47,8 +47,20 @@ On the live-run listings, the top pick (80k) stayed #1, while the 111k–125k Ma
 
 Side effect to watch: a sub-90k car with reviewed engine/transmission issues (2020 Forte, 87k) now ranks #2. The repair reserve still prices that risk in TCO, but low mileage now outweighs it in the overall score.
 
+## Rescan (2026-11-09): complaint counts normalized by sales
+
+After the mileage change, the top 10 was almost all Mazda and Kia, with no Toyota or Honda. The cause was the reliability criterion: it compared **raw** NHTSA complaints per year. Best-sellers collect complaints in proportion to volume. The 2016 Civic logged 99.5 complaints a year against the Mazda3's 9.5, on roughly 3.5× the sales.
+
+- **New `scoring/us-sales.yaml`:** approximate annual US sales by model and era, rounded from manufacturer year-end figures (as tabulated by goodcarbadcar.net and others). It's accurate to about ±15%, which is enough for a percentile comparison.
+- **What the engine does with it:** when a car and at least 3 model-years in its cohort have sales data, complaint rates are compared per 100k cars sold. The "large powertrain cluster" threshold (10 complaints) also scales with sales above 100k per year. Evidence strings say whether a score is sales-normalized. `--no-sales` turns it off.
+- **Effect on the 90-listing rescan:**
+  - A 2016 Camry LE moved from #13 to #4, and a 2017 Corolla LE from #20 to #5.
+  - The 2018 Mazda3 fell from #4 to #15: it's a low-volume year, at about 19 complaints per 100k sold.
+  - The 2016 Civic stays low even normalized (about 28 per 100k), so its penalty is real.
+  - #1 didn't change.
+
 ## Open questions
 
-- **Sales normalization:** is there a free, citable source of annual US sales by model?
+- **Sales coverage:** `us-sales.yaml` covers only the models this buyer searched. Expand it, and replace the "rough" rows (older Prius, hybrids) with sourced figures.
 - **Expected repairs:** the reserve amounts are hand-set. Calibrate them against repair-cost data (Wrench.Pro "Pro" tier, or user-reported).
 - **Insurance:** no free quote source. Is a class-based band plus the theft multiplier good enough, or should we just require a user quote for finalists?

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { SalesTable } from "./sales.ts";
 
 export const CRITERIA = [
   "deal_vs_market", "reliability", "title_status", "accident_damage", "total_cost_of_ownership",
@@ -76,6 +77,8 @@ export const VehicleRecord = z.object({
     reviewedClusters: z.array(ReviewedCluster).optional(),
     theftProne: z.boolean().optional(),
     userRating: z.number().int().min(1).max(5).optional(),
+    /** Approximate annual US sales; when set, complaint rates are compared per 100k cars sold. */
+    annualSales: z.number().positive().optional(),
   }).optional(),
   vinRecalls: z.object({
     openCount: z.number().int().nonnegative(),
@@ -124,7 +127,9 @@ export interface RunContext {
   fuelPricePerGal: number;
   defaultAprPercent: number;
   /** Optional reliability cohort; defaults to the distinct model-years among the candidates. */
-  reliabilityCohort?: Array<{ perYear: number; crashFireInjuryPerYear: number; severeShare: number }>;
+  reliabilityCohort?: Array<{ perYear: number; crashFireInjuryPerYear: number; severeShare: number; annualSales?: number }>;
+  /** Optional US sales table (scoring/us-sales.yaml); fills reliability.annualSales where the record has none. */
+  salesTable?: SalesTable;
 }
 
 export interface CriterionResult {

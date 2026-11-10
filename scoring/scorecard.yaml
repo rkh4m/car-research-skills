@@ -125,7 +125,9 @@ criteria:
   reliability:
     input: model-year composite vs segment peers in this run
     components:                  # each 0-100, blended by share
-      complaint_severity_percentile: 0.55   # crash/fire/injury/death weighted; per year-on-market; 100 = best in cohort
+      complaint_severity_percentile: 0.55   # crash/fire/injury/death weighted; per year-on-market; 100 = best in cohort.
+                                            # Per 100k US sales when scoring/us-sales.yaml covers the car and ≥3 cohort
+                                            # model-years (else raw rates, labelled "not sales-normalized").
       powertrain_electrical_share: 0.20     # lower share of engine/transmission/electrical complaints = higher
       investigations_and_tsbs: 0.10         # open PE/EA investigation −30; warranty extension still in force +10
       owner_report_evidence: 0.15           # grade A/B patterns only; grade C anecdotes never move the score

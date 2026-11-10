@@ -10,6 +10,7 @@ import { enrichCandidates } from "../enrich/enrich.ts";
 import { fromCarGurus, fromDealerDirect } from "../listings/adapters.ts";
 import { buildCandidates } from "../listings/pipeline.ts";
 import { scoreCandidates } from "../scoring/engine.ts";
+import { DEFAULT_SALES_PATH, loadSalesTable } from "../scoring/sales.ts";
 import { DEFAULT_SCORECARD_PATH, loadScorecard } from "../scoring/scorecard.ts";
 import type { ScoreResult } from "../scoring/types.ts";
 
@@ -17,7 +18,7 @@ const USAGE = `Usage:
   car-research normalize --origin <lat,lng> --radius <mi> [--cargurus <file.json>]... [--dealer-direct <file.json>]... [--date YYYY-MM-DD] --out <candidates.json>
   car-research enrich --candidates <in.json> --out <out.json> [--date YYYY-MM-DD] [--cache-dir data/cache] [--no-wrench]
   car-research score --candidates <file.json> --profile <profile.yaml> --fuel <usd/gal> --apr <percent>
-                     [--date YYYY-MM-DD] [--scorecard <scorecard.yaml>] [--out <result.json>]`;
+                     [--date YYYY-MM-DD] [--scorecard <scorecard.yaml>] [--sales <us-sales.yaml> | --no-sales] [--out <result.json>]`;
 
 const fail = (): never => { console.error(USAGE); process.exit(2); };
 const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
@@ -78,6 +79,7 @@ const score = (args: string[]) => {
   const { values } = parseArgs({ args, options: {
     candidates: { type: "string" }, profile: { type: "string" }, fuel: { type: "string" }, apr: { type: "string" },
     date: { type: "string" }, scorecard: { type: "string" }, out: { type: "string" },
+    sales: { type: "string" }, "no-sales": { type: "boolean" },
   } });
   if (!values.candidates || !values.profile || !values.fuel || !values.apr) fail();
   const sc = loadScorecard(values.scorecard ?? DEFAULT_SCORECARD_PATH);
@@ -85,6 +87,7 @@ const score = (args: string[]) => {
     runDate: values.date ? new Date(`${values.date}T12:00:00Z`) : new Date(),
     fuelPricePerGal: Number(values.fuel),
     defaultAprPercent: Number(values.apr),
+    salesTable: values["no-sales"] ? undefined : loadSalesTable(values.sales ?? DEFAULT_SALES_PATH),
   });
   console.log(`Shortlist (${result.shortlist.length}):`);
   result.shortlist.forEach((r, i) => console.log(line(r, i)));

@@ -1,0 +1,29 @@
+# Approximate annual US sales by model, used to put NHTSA complaint counts on a per-car basis.
+#
+# Why: raw complaints per year punish best-sellers. A Civic sells ~3-4x as many cars as a Mazda3, so it
+# collects ~3-4x the complaints at the same per-car failure rate.
+#
+# What the numbers are: rounded calendar-year US sales, applied to model years by era (a model year is
+# mostly sold in the matching calendar year). Precision is about ±15%, which is fine for a percentile
+# comparison but not for anything finer. Hybrids filed separately at NHTSA get their own (smaller) rows.
+#
+# Sources (checked 2026-11-09): manufacturer year-end sales releases as tabulated by goodcarbadcar.net
+# (2016 and 2019 passenger-car tables), tflcar.com and carfigures.com. Examples: 2016 Camry 388,618,
+# Corolla ~378k, Civic 366,927, Accord 345,225, Elantra 208,319, Forte 103,292, Mazda3 95,567,
+# Fit 56,630; 2019 Camry 336,978, Civic 325,650, Corolla 304,850, Accord 267,567, Elantra 175,094,
+# Forte 95,683, Prius 69,718. Values marked "rough" are estimates with wider error.
+#
+# Models not listed fall back to raw (not sales-normalized) complaint rates, and the report says so.
+# eras: [first_model_year, last_model_year, annual_us_sales]
+models:
+  - { make: Toyota,  model: Camry,          eras: [[2012, 2017, 390000], [2018, 2022, 320000], [2023, 2026, 290000]] }
+  - { make: Toyota,  model: Camry Hybrid,   eras: [[2012, 2017, 40000]] }                        # rough
+  - { make: Toyota,  model: Corolla,        eras: [[2014, 2018, 360000], [2019, 2022, 300000], [2023, 2026, 230000]] }
+  - { make: Toyota,  model: Prius,          eras: [[2012, 2016, 120000], [2017, 2018, 85000], [2019, 2022, 65000]] }  # liftback; rough before 2019
+  - { make: Honda,   model: Civic,          eras: [[2014, 2019, 350000], [2020, 2022, 260000], [2023, 2026, 200000]] }
+  - { make: Honda,   model: Accord,         eras: [[2013, 2017, 350000], [2018, 2022, 270000], [2023, 2026, 200000]] }
+  - { make: Honda,   model: Accord Hybrid,  eras: [[2014, 2017, 15000]] }                        # rough
+  - { make: Honda,   model: Fit,            eras: [[2015, 2020, 55000]] }
+  - { make: Mazda,   model: Mazda3,         eras: [[2014, 2016, 100000], [2017, 2017, 75000], [2018, 2018, 65000], [2019, 2026, 50000]] }
+  - { make: Hyundai, model: Elantra,        eras: [[2014, 2017, 210000], [2018, 2022, 170000], [2023, 2026, 140000]] }
+  - { make: Kia,     model: Forte,          eras: [[2014, 2016, 100000], [2017, 2022, 110000], [2023, 2026, 120000]] }

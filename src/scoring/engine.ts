@@ -1,4 +1,5 @@
 import { evaluate, tryEvaluate, type Facts } from "./expr.ts";
+import { salesFor } from "./sales.ts";
 import type { Scorecard } from "./scorecard.ts";
 import {
   BuyerProfile, CRITERIA, VehicleRecord,
@@ -27,8 +28,11 @@ export const amortizedPayment = (principal: number, aprPercent: number, months: 
 const sortedClusters = (c: ReviewedCluster[] | undefined) => [...(c ?? [])].sort((a, b) => b.complaintCount - a.complaintCount);
 export const hasTopFailureCluster = (clusters: ReviewedCluster[] | undefined) =>
   sortedClusters(clusters).slice(0, 2).some(c => FAILURE_COMPONENT.test(c.componentCode) && FAILURE_LABEL.test(c.label));
-const hasLargePowertrainCluster = (clusters: ReviewedCluster[] | undefined) =>
-  (clusters ?? []).some(c => POWERTRAIN_COMPONENT.test(c.componentCode) && c.complaintCount >= 10);
+/** ≥10 powertrain complaints counts as "large" for a ~100k/yr seller; the bar scales up for best-sellers. */
+const hasLargePowertrainCluster = (clusters: ReviewedCluster[] | undefined, annualSales?: number) =>
+  (clusters ?? []).some(c => POWERTRAIN_COMPONENT.test(c.componentCode) && c.complaintCount >= 10 * Math.max(1, (annualSales ?? 0) / 100_000));
+/** Below this many cohort model-years with sales data, fall back to raw complaint rates. */
+const MIN_SALES_COHORT = 3;
 
 const lookup = (map: Record<string, number | "unknown">, key: string | undefined): number | null => {
   if (key === undefined) return null;
@@ -131,12 +135,20 @@ const scoreReliability = (sc: Scorecard, v: VehicleRecord, ctx: RunContext, coho
     return unknown(sc, r.recalls > 0 ? "0 complaints but recalls exist — model likely filed under another name" : "no complaints on file");
   }
   const parts: Array<[number, number]> = [];
-  const sev = 100 * (1 - (0.7 * percentile(cohort.map(c => c.perYear), r.perYear) + 0.3 * percentile(cohort.map(c => c.crashFireInjuryPerYear), r.crashFireInjuryPerYear)));
+  // Compare per 100k cars sold when this car and enough of the cohort have sales data; otherwise raw rates.
+  const salesCohort = cohort.filter(c => c.annualSales);
+  const normalized = Boolean(r.annualSales) && salesCohort.length >= MIN_SALES_COHORT;
+  const per100k = (x: number, sales: number) => (x * 100_000) / sales;
+  const [peer, rate, cfiRate] = normalized
+    ? [salesCohort.map(c => [per100k(c.perYear, c.annualSales!), per100k(c.crashFireInjuryPerYear, c.annualSales!)] as const),
+      per100k(r.perYear, r.annualSales!), per100k(r.crashFireInjuryPerYear, r.annualSales!)]
+    : [cohort.map(c => [c.perYear, c.crashFireInjuryPerYear] as const), r.perYear, r.crashFireInjuryPerYear];
+  const sev = 100 * (1 - (0.7 * percentile(peer.map(p => p[0]), rate) + 0.3 * percentile(peer.map(p => p[1]), cfiRate)));
   parts.push([sev, cfg.components.complaint_severity_percentile]);
   parts.push([100 * (1 - percentile(cohort.map(c => c.severeShare), r.severeShare)), cfg.components.powertrain_electrical_share]);
   if (r.openInvestigations !== undefined) parts.push([clamp(100 - 30 * r.openInvestigations), cfg.components.investigations_and_tsbs]);
   if (r.reviewedClusters) {
-    const ev = hasTopFailureCluster(r.reviewedClusters) ? 25 : hasLargePowertrainCluster(r.reviewedClusters) ? 50 : 85;
+    const ev = hasTopFailureCluster(r.reviewedClusters) ? 25 : hasLargePowertrainCluster(r.reviewedClusters, r.annualSales) ? 50 : 85;
     parts.push([ev, cfg.components.owner_report_evidence]);
     if (ev <= 30) flags.push("reviewed_engine_or_transmission_failures");
   }
@@ -150,7 +162,8 @@ const scoreReliability = (sc: Scorecard, v: VehicleRecord, ctx: RunContext, coho
   const top = sortedClusters(r.reviewedClusters)[0];
   return {
     score: Math.round(score), known: 1,
-    evidence: `${r.complaints} NHTSA complaints (${r.perYear}/yr on market)${top ? `; top reviewed issue: ${top.label} (${top.complaintCount})` : ""}; not sales-normalized`,
+    evidence: `${r.complaints} NHTSA complaints (${r.perYear}/yr on market${normalized ? `; ${round1(rate)}/yr per 100k sold, ~${Math.round(r.annualSales! / 1000)}k US sales/yr` : ""})`
+      + `${top ? `; top reviewed issue: ${top.label} (${top.complaintCount})` : ""}; ${normalized ? "sales-normalized (approx.)" : "not sales-normalized"}`,
   };
 };
 
@@ -309,6 +322,12 @@ const compareResults = (a: ScoreResult, b: ScoreResult) =>
 export const scoreCandidates = (sc: Scorecard, inputs: VehicleInput[], profileInput: unknown, ctx: RunContext): RunResult => {
   const profile = BuyerProfile.parse(profileInput);
   const vehicles = inputs.map(v => VehicleRecord.parse(v));
+  for (const v of vehicles) {
+    if (v.reliability && v.reliability.annualSales === undefined) {
+      const s = salesFor(ctx.salesTable, v.make, v.model, v.year);
+      if (s) v.reliability.annualSales = s;
+    }
+  }
   const cohort = ctx.reliabilityCohort ?? [...new Map(vehicles.filter(v => v.reliability && v.reliability.complaints > 0)
     .map(v => [`${v.year}|${v.make}|${v.model}`, v.reliability!])).values()];
   const partials = vehicles.map(v => scoreOne(sc, v, profile, ctx, cohort));
