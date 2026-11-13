@@ -39,6 +39,8 @@ export interface SourceRef {
   url?: string;
   price: number;
   feesTotal: number;
+  /** True when feesTotal is an assumption (source publishes no fees), not the dealer's stated fee. */
+  feesAssumed?: boolean;
   observedAt: string;
 }
 

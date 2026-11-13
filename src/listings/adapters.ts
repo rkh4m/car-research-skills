@@ -65,6 +65,43 @@ export const fromCarGurus = (payload: unknown, observedAt = today()): RawListing
     }];
   });
 
+const usageOf = (s: unknown): "personal" | "rental" | "fleet" | "unknown" => {
+  const t = String(s ?? "").toLowerCase();
+  if (t.includes("rental")) return "rental";
+  if (t.includes("fleet") || t.includes("commercial") || t.includes("taxi")) return "fleet";
+  if (t.includes("personal") || t.includes("lease")) return "personal";
+  return "unknown";
+};
+
+/**
+ * Auto.dev `/listings` rows (MCP `auto_listings` or `auto listings --json`). Dealer fees are not published,
+ * so `assumedFees` (a typical local doc/processing fee) is added and the listing is flagged `fees_assumed`;
+ * pass 0 to leave fees out. History has accident/owner/usage counts but no title brand, so title stays unknown.
+ */
+export const fromAutoDev = (payload: unknown, observedAt = today(), assumedFees = 0): RawListing[] =>
+  listingsOf(payload).flatMap((x: any): RawListing[] => {
+    const v = x?.vehicle ?? {}; const r = x?.retailListing ?? {}; const h = x?.history;
+    if (!r.price || !v.year || !v.make || !v.model) return [];
+    const [lng, lat] = Array.isArray(x.location) ? x.location : [];
+    const flags: string[] = [];
+    if (assumedFees > 0) flags.push("fees_assumed");
+    return [{
+      source: "auto_dev", sourceId: String(x.vin ?? v.vin), url: r.vdp, observedAt,
+      vin: x.vin ?? v.vin, year: v.year, make: v.make, model: v.model, trim: v.trim,
+      condition: r.cpo ? "cpo" : r.used === false ? "new" : "used",
+      price: r.price, feesTotal: assumedFees, mileage: r.miles ?? 0,
+      dealer: { name: r.dealer, city: r.city, state: r.state, lat, lng },
+      trustedDistance: false,
+      bodyStyle: v.style ?? v.bodyStyle, fuelType: fuelType(v.fuel),
+      history: h ? {
+        source: "listing", accidents: typeof h.accidentCount === "number" ? h.accidentCount : undefined,
+        // Auto.dev sometimes reports 0 owners (no title records yet); a used car has at least one, so treat as unknown.
+        owners: typeof h.ownerCount === "number" && h.ownerCount > 0 ? h.ownerCount : undefined, usage: usageOf(h.usageType),
+      } : undefined,
+      flags,
+    }];
+  });
+
 /** Dealer-Direct MCP `search_inventory` vehicles. Its distance_miles is unreliable, so coordinates are kept instead. */
 export const fromDealerDirect = (payload: unknown, observedAt = today()): RawListing[] =>
   listingsOf(payload).flatMap((x: any): RawListing[] => {

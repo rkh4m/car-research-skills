@@ -7,7 +7,7 @@ import { HttpClient } from "../clients/http.ts";
 import { NhtsaClient } from "../clients/nhtsa.ts";
 import { WrenchClient } from "../clients/wrench.ts";
 import { enrichCandidates } from "../enrich/enrich.ts";
-import { fromCarGurus, fromDealerDirect } from "../listings/adapters.ts";
+import { fromAutoDev, fromCarGurus, fromDealerDirect } from "../listings/adapters.ts";
 import { buildCandidates } from "../listings/pipeline.ts";
 import { scoreCandidates } from "../scoring/engine.ts";
 import { DEFAULT_SALES_PATH, loadSalesTable } from "../scoring/sales.ts";
@@ -15,7 +15,7 @@ import { DEFAULT_SCORECARD_PATH, loadScorecard } from "../scoring/scorecard.ts";
 import type { ScoreResult } from "../scoring/types.ts";
 
 const USAGE = `Usage:
-  car-research normalize --origin <lat,lng> --radius <mi> [--cargurus <file.json>]... [--dealer-direct <file.json>]... [--date YYYY-MM-DD] --out <candidates.json>
+  car-research normalize --origin <lat,lng> --radius <mi> [--cargurus <file.json>]... [--dealer-direct <file.json>]... [--auto-dev <file.json>]... [--auto-dev-fee <usd>] [--date YYYY-MM-DD] --out <candidates.json>
   car-research enrich --candidates <in.json> --out <out.json> [--date YYYY-MM-DD] [--cache-dir data/cache] [--no-wrench]
   car-research score --candidates <file.json> --profile <profile.yaml> --fuel <usd/gal> --apr <percent>
                      [--date YYYY-MM-DD] [--scorecard <scorecard.yaml>] [--sales <us-sales.yaml> | --no-sales] [--out <result.json>]`;
@@ -35,6 +35,7 @@ const normalize = (args: string[]) => {
   const { values } = parseArgs({ args, options: {
     origin: { type: "string" }, radius: { type: "string" }, cargurus: { type: "string", multiple: true },
     "dealer-direct": { type: "string", multiple: true }, date: { type: "string" }, out: { type: "string" },
+    "auto-dev": { type: "string", multiple: true }, "auto-dev-fee": { type: "string" },
   } });
   const [lat, lng] = (values.origin ?? "").split(",").map(Number);
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || !values.radius || !values.out) fail();
@@ -42,6 +43,7 @@ const normalize = (args: string[]) => {
   const raws = [
     ...(values.cargurus ?? []).flatMap(f => fromCarGurus(readJson(f), observedAt)),
     ...(values["dealer-direct"] ?? []).flatMap(f => fromDealerDirect(readJson(f), observedAt)),
+    ...(values["auto-dev"] ?? []).flatMap(f => fromAutoDev(readJson(f), observedAt, Number(values["auto-dev-fee"] ?? 0))),
   ];
   const b = buildCandidates(raws, { origin: { lat: lat!, lng: lng! }, radiusMi: Number(values.radius) });
   writeFileSync(values.out!, JSON.stringify(b.candidates, null, 2));

@@ -1,4 +1,4 @@
-import type { Condition, DroppedListing, NormalizedListing, RawListing } from "./types.ts";
+import type { Condition, DroppedListing, NormalizedListing, RawListing, SourceRef } from "./types.ts";
 
 export interface LatLng { lat: number; lng: number }
 export interface NormalizeOptions {
@@ -55,11 +55,16 @@ const sameVehicle = (a: NormalizedListing, b: RawListing, tol: number) => {
 };
 
 const choosePrice = (l: NormalizedListing) => {
-  const eff = (s: { price: number; feesTotal: number }) => s.price + s.feesTotal;
+  // Fees belong to the dealer, not the source: when any source states them, use that instead of an assumed fee.
+  const stated = l.sources.filter(s => !s.feesAssumed);
+  const realFee = stated.length ? Math.max(...stated.map(s => s.feesTotal)) : undefined;
+  const fee = (s: SourceRef) => (s.feesAssumed && realFee !== undefined ? realFee : s.feesTotal);
+  if (realFee !== undefined) l.flags = l.flags.filter(f => f !== "fees_assumed");
+  const eff = (s: SourceRef) => s.price + fee(s);
   const sorted = [...l.sources].sort((a, b) => eff(a) - eff(b));
   const low = sorted[0]!, high = sorted[sorted.length - 1]!;
   const pick = eff(high) > PRICE_CONFLICT_RATIO * eff(low) ? (l.flags.push("source_price_conflict"), high) : low;
-  l.price = pick.price; l.feesTotal = pick.feesTotal;
+  l.price = pick.price; l.feesTotal = fee(pick);
 };
 
 /** Distance from coordinates, radius filter, condition, and cross-source dedupe (VIN, else year+family+mileage). */
@@ -77,7 +82,8 @@ export const normalizeListings = (raws: RawListing[], opts: NormalizeOptions): N
     if (distanceMi !== undefined && distanceMi > opts.radiusMi) { dropped.push({ listing: r, reason: "outside_radius", detail: `${distanceMi} mi > ${opts.radiusMi}` }); continue; }
     if (distanceMi === undefined && !keepUnknown) { dropped.push({ listing: r, reason: "outside_radius", detail: "distance unknown" }); continue; }
     const condition = resolveCondition(r, flags);
-    const ref = { source: r.source, sourceId: r.sourceId, url: r.url, price: r.price, feesTotal: r.feesTotal ?? 0, observedAt: r.observedAt };
+    const ref: SourceRef = { source: r.source, sourceId: r.sourceId, url: r.url, price: r.price, feesTotal: r.feesTotal ?? 0,
+      ...(r.flags?.includes("fees_assumed") ? { feesAssumed: true } : {}), observedAt: r.observedAt };
 
     const existing = listings.find(l => sameVehicle(l, r, tol));
     if (existing) {
@@ -88,7 +94,14 @@ export const normalizeListings = (raws: RawListing[], opts: NormalizeOptions): N
       existing.msrp ??= r.msrp;
       existing.mpg ??= r.mpg;
       existing.fuelType ??= r.fuelType;
-      existing.history ??= r.history;
+      if (!existing.history) existing.history = r.history;
+      else if (r.history) {
+        // Keep the first source's history but fill facts it lacks (e.g. Auto.dev knows fleet/rental use, CarGurus doesn't).
+        for (const [k, v] of Object.entries(r.history) as [keyof NonNullable<RawListing["history"]>, unknown][]) {
+          if (v !== undefined && existing.history[k] === undefined) (existing.history as Record<string, unknown>)[k] = v;
+        }
+        if (r.history.usage && r.history.usage !== "unknown" && existing.history.usage === "unknown") existing.history.usage = r.history.usage;
+      }
       existing.daysOnMarket = Math.max(existing.daysOnMarket ?? 0, r.daysOnMarket ?? 0) || undefined;
       if (existing.distanceMi === undefined && distanceMi !== undefined) {
         existing.distanceMi = distanceMi;
