@@ -68,7 +68,13 @@ Read the buyer profile if one is given (YAML matching `config/buyer-profile.exam
 9. **Score** with the scorecard: gates → criteria → weights → confidence → budget rule.
 10. **Shortlist** the top 5 that pass: overall ≥ 65 and confidence ≥ 0.6.
 11. **Finalist checks (guided, the user performs them):** NHTSA VIN recall lookup, NICB VINCheck, and optionally NMVTIS / Carfax per the "when paid reports are worth it" table. Rescore when results come back.
-12. **Deliver the report** (format below).
+12. **Availability check — required the same day, before any car is recommended.** Listings sell fast, and a sold car can still show up on aggregators for days. For every car you are about to recommend (shortlist, "backup", or a single pick):
+   - Re-fetch it with `vehicle-listing-detail` (or the source it came from) and compare price, miles and VIN with what you scored. A price change means rescore.
+   - Read `deal.rating`. **"NA" is a warning, not missing data.** Check `deal.noDealRatingReason`. A theft or title reason excludes the car (scorecard gate `theft_on_history`). No reason given usually means the listing was pulled; treat the car as possibly sold.
+   - Confirm it on the **dealer's own inventory page** in the browser (read-only; browsing rules below apply). If it's gone, say so and drop it. If the dealer site can't be checked, write "availability not confirmed on dealer site".
+   - Label each pick in the report: "**Verified available <date> (dealer site)**", "listed on <source> <date>, dealer site not checked", or "possibly sold".
+   - Never recommend a backup you haven't rechecked. In a live run, a recommended backup turned out to have a theft on its record; its missing deal rating was the clue.
+13. **Deliver the report** (format below).
 
 ## Browsing rules (non-negotiable)
 
@@ -88,6 +94,7 @@ Read the buyer profile if one is given (YAML matching `config/buyer-profile.exam
 
 ### 1. <Year Make Model Trim> — <price>, <miles> mi, <city> (<distance> mi)
 Listing: <url> (observed <date>) · VIN: <vin> (decode ✓/✗)
+Availability: verified available <date> on dealer site | listed on <source> <date>, dealer site not checked | possibly sold
 Score table: criterion · score · weight · evidence · source (date)
 Red flags: …
 Unknowns (lowering confidence): …

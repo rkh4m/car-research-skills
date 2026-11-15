@@ -70,6 +70,12 @@ gates:
     note: Added after the first live run, where a frame-damaged car scored 68 on price alone and would have made a shortlist.
   - id: theft_record
     when: nicb.theft_record == true and nicb.recovered != true
+  - id: theft_on_history
+    when: theft_reported == true
+    note: >-
+      A theft on the listing's vehicle history (CarGurus theftTitle / "Theft reported"). Added after a live run where the
+      adapter flagged it but the scorer never saw it, and the car ranked #2. Recovered thefts can still mean damage, missing
+      parts or title problems, so it stays excluded unless the user reviews the full report and overrides.
   - id: odometer_problem
     when: odometer_brand in [not_actual, exceeds_mechanical_limits] or odometer_rollback_suspected == true
   - id: unremedied_do_not_drive_recall

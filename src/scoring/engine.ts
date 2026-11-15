@@ -77,6 +77,7 @@ const vehicleFacts = (v: VehicleRecord, p: BuyerProfile, ctx: RunContext): Facts
     frame_damaged: h?.frameDamaged,
     structural_damage: h?.structuralDamage,
     airbag_deployed: h?.airbagDeployed,
+    theft_reported: h?.theftReported,
     odometer_brand: h?.odometerBrand,
     odometer_rollback_suspected: h?.odometerRollbackSuspected,
     usage: h?.usage,

@@ -52,3 +52,24 @@ test("unusable items are skipped rather than throwing", () => {
   assert.deepEqual(fromCarGurus({ listings: [{ id: 1, listingTitle: "garbage" }, { listingId: 2, data: {} }] }), []);
   assert.deepEqual(fromDealerDirect([{ id: "x", year: 2020 }]), []);
 });
+
+test("live case: a CarGurus theft title reaches the scorer and excludes the car", async () => {
+  const { buildCandidates } = await import("../../src/listings/pipeline.ts");
+  const { scoreCandidates } = await import("../../src/scoring/engine.ts");
+  const { loadScorecard } = await import("../../src/scoring/scorecard.ts");
+  const { ORIGIN } = await import("./payloads.ts");
+  const theft = cgDetail({ vehicleHistory: { ...cgDetail().data.vehicleHistory, theftTitle: true, ownerCount: 2 },
+    deal: { rating: "NA", noDealRatingReason: "Theft reported" } });
+  const [r] = fromCarGurus([theft]);
+  assert.equal(r!.history?.theftReported, true);
+  // The rating reason alone is enough, even if the history flag is missing.
+  const [r2] = fromCarGurus([cgDetail({ deal: { rating: "NA", noDealRatingReason: "Theft reported" } })]);
+  assert.equal(r2!.history?.theftReported, true);
+  assert.equal(fromCarGurus([cgDetail()])[0]!.history?.theftReported, undefined);
+
+  const b = buildCandidates(fromCarGurus([theft]), { origin: ORIGIN, radiusMi: 75 });
+  const profile = { budget: { target_min: 10000, target_max: 15000, stretch_max: 35000 }, payment: { method: "cash" } };
+  const res = scoreCandidates(loadScorecard(), b.candidates, profile, { runDate: new Date("2026-11-15T12:00:00Z"), fuelPricePerGal: 4, defaultAprPercent: 8.5 });
+  assert.deepEqual(res.ranked[0]!.gates, ["theft_on_history"]);
+  assert.equal(res.shortlist.length, 0);
+});

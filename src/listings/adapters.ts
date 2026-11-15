@@ -56,7 +56,8 @@ export const fromCarGurus = (payload: unknown, observedAt = today()): RawListing
       const fees = (d.feeTax?.dealerFees ?? []).reduce((s: number, f: any) => s + (money(f.amountString) ?? 0), 0)
         || Math.max(0, (money(d.price?.pricePlusFeesString) ?? base) - base);
       const flags: string[] = [];
-      if (h.theftTitle) flags.push("theft_title_reported");
+      const theft = h.theftTitle === true || /theft/i.test(String(d.deal?.noDealRatingReason ?? ""));
+      if (theft) flags.push("theft_title_reported");
       const titleBrand = h.salvage ? "salvage" as const : h.lemon ? "lemon_buyback" as const : h.hasVehicleHistory ? "clean" as const : undefined;
       return [{
         source: "cargurus", sourceId: String(item.listingId ?? d.id), url: d.vdpUrl, observedAt,
@@ -70,6 +71,7 @@ export const fromCarGurus = (payload: unknown, observedAt = today()): RawListing
         daysOnMarket: d.history?.daysOnCarGurus ?? d.history?.daysAtDealer,
         history: h.hasVehicleHistory ? {
           source: "listing", titleBrand, accidents: h.accidentCount, owners: h.ownerCount, frameDamaged: h.frameDamaged,
+          ...(theft ? { theftReported: true } : {}),
         } : undefined,
         flags,
       }];

@@ -60,6 +60,8 @@ export const VehicleRecord = z.object({
     frameDamaged: z.boolean().optional(),
     structuralDamage: z.boolean().optional(),
     airbagDeployed: z.boolean().optional(),
+    /** A theft is on the vehicle's record (e.g. CarGurus vehicleHistory.theftTitle). Recovery is not implied. */
+    theftReported: z.boolean().optional(),
     usage: z.enum(["personal", "rental", "fleet", "unknown"]).optional(),
     service: z.enum(["regular", "some", "gaps_over_24_months", "none_on_report"]).optional(),
     odometerBrand: z.enum(["actual", "not_actual", "exceeds_mechanical_limits"]).optional(),
