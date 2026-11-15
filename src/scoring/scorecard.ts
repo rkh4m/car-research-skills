@@ -37,6 +37,8 @@ export const ScorecardSchema = z.object({
   criteria: z.object({
     deal_vs_market: z.object({
       bands: z.array(z.object({ min: z.number(), score: z.number() })).min(1),
+      /** When true, score is interpolated between band points instead of jumping at each edge. */
+      interpolate: z.boolean().default(false),
       modifiers: z.array(Conditional),
       red_flags: z.array(Conditional),
       partial_if: z.object({ comps_between: z.tuple([z.number(), z.number()]), confidence_factor: z.number() }),

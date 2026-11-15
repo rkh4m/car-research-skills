@@ -27,6 +27,7 @@ export const VehicleRecord = z.object({
   feesTotal: z.number().nonnegative().default(0),
   mileage: z.number().nonnegative(),
   distanceMi: z.number().nonnegative().optional(),
+  bodyStyle: z.enum(["sedan", "hatchback", "coupe", "convertible", "wagon", "suv", "truck", "van"]).optional(),
   fuelType: z.enum(["gas", "hybrid", "plug_in_hybrid", "electric", "diesel"]).default("gas"),
   mpg: z.number().positive().optional(),
   url: z.string().optional(),
@@ -105,7 +106,11 @@ export const BuyerProfile = z.object({
     allow_branded_title: z.boolean().default(false),
     allow_structural_damage: z.boolean().default(false),
   }).default({ max_mileage: 130000, allow_branded_title: false, allow_structural_damage: false }),
-  needs: z.object({ must_have: z.array(z.string()).default([]) }).default({ must_have: [] }),
+  needs: z.object({
+    must_have: z.array(z.string()).default([]),
+    /** Body styles the buyer wants (sedan, hatchback, coupe, suv…). Empty or absent = any. compact_suv counts as suv. */
+    body_styles: z.array(z.string()).optional(),
+  }).default({ must_have: [] }),
   usage: z.object({
     annual_miles: z.number().positive().default(12000),
     fuel_price_override: z.number().positive().nullable().default(null),

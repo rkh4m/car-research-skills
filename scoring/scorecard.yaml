@@ -86,6 +86,9 @@ gates:
     when: mileage > limits.max_mileage
   - id: missing_must_have
     when: missing_must_have_count > 0
+  - id: body_style_not_wanted
+    when: body_style_wanted == false
+    note: Buyer's needs.body_styles excludes this body (e.g. a coupe when only sedans/hatchbacks are wanted). Unknown body never excludes.
 
 # Condition syntax (evaluated by src/scoring/expr.ts): `fact OP value` joined by `and` / `or` (no parentheses).
 # OP: >= <= > < == != ; `fact in [a, b]`; value may be a number, true/false, a bare word, another fact, or `N * fact`.
@@ -97,14 +100,17 @@ gates:
 criteria:
   deal_vs_market:
     input: pct_vs_baseline = (baseline - price_normalized) / baseline   # positive = below market
-    baseline: weighted median of comps (similarity²), MAD outliers removed, mileage-adjusted
-    bands:                       # pct_vs_baseline → score
-      - { min: 0.15, score: 100 }
-      - { min: 0.10, score: 90 }
-      - { min: 0.05, score: 78 }
-      - { min: -0.05, score: 60 }
-      - { min: -0.10, score: 40 }
-      - { min: -0.20, score: 20 }
+    baseline: weighted median of comps (similarity²), MAD outliers removed, adjusted for mileage, year and trim tier
+    interpolate: true            # score is interpolated between these points (no jumps at band edges)
+    bands:                       # pct_vs_baseline → score at that point
+      - { min: 0.20, score: 100 }
+      - { min: 0.15, score: 95 }
+      - { min: 0.10, score: 86 }
+      - { min: 0.05, score: 74 }
+      - { min: 0.00, score: 60 }
+      - { min: -0.05, score: 48 }
+      - { min: -0.10, score: 36 }
+      - { min: -0.20, score: 18 }
       - { min: -1.00, score: 5 }
     new_vehicle_input: pct_below_msrp = (msrp - effective_price) / msrp, scored with the same bands
     modifiers:
@@ -116,7 +122,7 @@ criteria:
       - { when: "run_month in [11, 12]", add: 0, note: "year-end: month/quarter/year targets; ask for best OTD in writing" }
       - { when: local_median_vs_national >= 0.08, add: 0, note: "region runs hot; widen radius" }
     red_flags:
-      - { when: pct_vs_baseline >= 0.25, flag: too_good_to_be_true, note: "verify title/VIN before trusting" }
+      - { when: pct_vs_baseline >= 0.20, flag: too_good_to_be_true, note: "find out why it is this cheap before trusting it: title, accidents, known failures" }
       - { when: price_is_finance_only == true, flag: finance_only_price }
       - { when: ad_price_includes_conditional_rebates == true, flag: conditional_price, note: "headline price assumes rebates/financing/trade-in you may not qualify for" }
     known_if: comps >= 6

@@ -8,7 +8,27 @@ export interface PriceModel {
   perModelYear: number;
   fitted: boolean;
   n: number;
+  /** Fractional price premium of mid and upper trims over base trims (e.g. 0.05), when it could be fitted. */
+  trimPremium?: { mid: number; upper: number };
 }
+
+export type TrimTier = "base" | "mid" | "upper";
+const UPPER_TRIM = /limited|grand touring|touring l|xle|xse|ex-l|platinum|premium|ultimate|titanium|\bsx\b|gt[- ]?line|n line|\bgt\b|prestige|signature|carbon|turbo/i;
+const MID_TRIM = /\bex\b|\bsel\b|touring|sport|\bse\b|plus|preferred|select|special|value|\beco\b|\bs\b|nightshade|apex|\bsr\b/i;
+/**
+ * Rough equipment tier from the trim name: base (L, LE, LX, i Sport…), mid (EX, SEL, Touring, SE…), upper (Limited, XLE, EX-L…).
+ * Naming differs by brand, so this is approximate; the premium is fitted from the listings, which limits the harm of a mislabel.
+ */
+export const trimTier = (trim: string | undefined): TrimTier | undefined => {
+  const t = (trim ?? "").replace(/\b(fwd|awd|sedan|hatchback|4dr|cvt|automatic)\b/gi, "").trim();
+  // A trim that is only body style or drivetrain ("Sedan FWD") is the unnamed base model, e.g. the 2019+ Mazda3.
+  if (!t) return (trim ?? "").trim() ? "base" : undefined;
+  if (UPPER_TRIM.test(t)) return "upper";
+  if (/^i sport\b/i.test(t) || /^(l|le|lx|lxs|fe|base|ce|blue|lx-p|s|se)$/i.test(t)) return "base";
+  return MID_TRIM.test(t) ? "mid" : "base";
+};
+const tierLog = (m: PriceModel, tier: TrimTier | undefined) =>
+  !m.trimPremium || !tier || tier === "base" ? 0 : Math.log(1 + m.trimPremium[tier]);
 
 export interface CompsOptions {
   window?: { years: number; miles: number };
@@ -26,6 +46,8 @@ const DEFAULTS = {
   defaultModel: { perTenKMiles: 0.04, perModelYear: 0.035 },
 };
 
+/** Listings needed in each trim tier before a trim premium is fitted. */
+const MIN_PER_TIER = 15;
 const effective = (l: NormalizedListing) => l.price + l.feesTotal;
 const isNewClass = (l: NormalizedListing) => l.condition === "new";
 
@@ -87,11 +109,26 @@ export const fitPriceModel = (listings: NormalizedListing[], opts: CompsOptions 
   if (kept.length >= 2 * (fams.length + 2)) beta = fit(kept) ?? beta;
   const perModelYear = beta[fams.length]!, perTenKMiles = -beta[fams.length + 1]!;
   if (!(perTenKMiles > 0 && perTenKMiles < 0.2 && perModelYear > 0 && perModelYear < 0.3)) return fallback;
-  return { perTenKMiles, perModelYear, fitted: true, n: kept.length };
+  const model: PriceModel = { perTenKMiles, perModelYear, fitted: true, n: kept.length };
+
+  // Second pass: how much more mid and upper trims cost than base trims, all else equal.
+  const tiered = kept.filter(l => trimTier(l.trim));
+  const count = (t: TrimTier) => tiered.filter(l => trimTier(l.trim) === t).length;
+  if (Math.min(count("base"), count("mid"), count("upper")) >= MIN_PER_TIER) {
+    const rowT = (l: NormalizedListing) => [...row(l), trimTier(l.trim) === "mid" ? 1 : 0, trimTier(l.trim) === "upper" ? 1 : 0];
+    const bt = solve(tiered.map(rowT), tiered.map(l => Math.log(effective(l))));
+    if (bt) {
+      const mid = Math.exp(bt[fams.length + 2]!) - 1, upper = Math.exp(bt[fams.length + 3]!) - 1;
+      // Keep only a plausible ordering: upper costs more than base, and at least as much as mid.
+      if (upper > 0 && upper < 0.4 && mid > -0.05 && mid <= upper) model.trimPremium = { mid: Math.max(0, mid), upper };
+    }
+  }
+  return model;
 };
 
 const compsWithin = (t: NormalizedListing, pool: NormalizedListing[], w: { years: number; miles: number }) =>
   pool.filter(c => c !== t && c.family === t.family && isNewClass(c) === isNewClass(t)
+    && (!c.bodyStyle || !t.bodyStyle || c.bodyStyle === t.bodyStyle)
     && Math.abs(c.year - t.year) <= w.years && Math.abs(c.mileage - t.mileage) <= w.miles);
 
 /**
@@ -106,7 +143,9 @@ export const computeBaselines = (listings: NormalizedListing[], model: PriceMode
     let comps = compsWithin(t, listings, window);
     if (comps.length < o.minCompsBeforeWidening) { window = o.widenedWindow; widened = true; comps = compsWithin(t, listings, window); }
     let adjusted = comps.map(c => {
-      const x = effective(c) * Math.exp(-model.perTenKMiles * (t.mileage - c.mileage) / 10000 + model.perModelYear * (t.year - c.year));
+      // Adjust the comp to the target's mileage, year and trim tier (unknown trims are left unadjusted).
+      const tierAdj = trimTier(t.trim) && trimTier(c.trim) ? tierLog(model, trimTier(t.trim)) - tierLog(model, trimTier(c.trim)) : 0;
+      const x = effective(c) * Math.exp(-model.perTenKMiles * (t.mileage - c.mileage) / 10000 + model.perModelYear * (t.year - c.year) + tierAdj);
       const sim = Math.max(0.05, 1 - 0.5 * Math.abs(c.year - t.year) / window.years - 0.5 * Math.abs(c.mileage - t.mileage) / window.miles);
       return { x, w: sim * sim };
     });

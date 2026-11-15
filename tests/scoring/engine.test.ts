@@ -95,7 +95,7 @@ test("live-run case: misparsed new-car price ($4,500 vs $42,815 MSRP) is held as
 test("new car uses MSRP for the deal score and its own weights", () => {
   const r = run([car({ id: "new", condition: "new", year: 2026, price: 31000, feesTotal: 0, mileage: 5, market: { msrp: 36000, comps: 0 }, history: undefined })]);
   const x = byId(r, "new");
-  assert.equal(x.criteria.deal_vs_market.score, 90); // 13.9% under MSRP
+  assert.equal(x.criteria.deal_vs_market.score, 93); // 13.9% under MSRP, interpolated between 10% (86) and 15% (95)
   assert.equal(x.criteria.title_status.weight, 0);
   assert.equal(x.criteria.deal_vs_market.weight, 35);
 });
@@ -185,4 +185,24 @@ test("cash buyers carry no interest; financed TCO matches the amortization formu
   const fin = byId(run([car({ id: "f" })]), "f");
   const principal = 12900 * 1.0415 - 5000;
   assert.equal(fin.tco!.monthlyPayment, Math.round(amortizedPayment(principal, 8.5, 60)));
+});
+
+test("deal score is interpolated, so there is no cliff at a band edge", () => {
+  const at = (pct: number) => byId(run([car({ id: "x", price: Math.round(13500 * (1 - pct)), feesTotal: 0, market: { baseline: 13500, comps: 10 } })]), "x");
+  const [a, b] = [at(0.049).criteria.deal_vs_market.score, at(0.051).criteria.deal_vs_market.score];
+  assert.ok(Math.abs(a - b) <= 1, `4.9% under (${a}) vs 5.1% under (${b})`);
+  assert.equal(at(0).criteria.deal_vs_market.score, 60);
+  assert.ok(at(0.22).flags.includes("too_good_to_be_true"));
+  assert.ok(!at(0.18).flags.includes("too_good_to_be_true"));
+});
+
+test("needs.body_styles excludes unwanted bodies but never excludes on an unknown body", () => {
+  const prof = { ...profile, needs: { must_have: [], body_styles: ["sedan", "hatchback", "compact_suv"] } };
+  const r = run([car({ id: "coupe", bodyStyle: "coupe" }), car({ id: "sedan", bodyStyle: "sedan" }), car({ id: "suv", bodyStyle: "suv" }), car({ id: "unknown" })], prof);
+  assert.deepEqual(byId(r, "coupe").gates, ["body_style_not_wanted"]);
+  assert.deepEqual(byId(r, "sedan").gates, []);
+  assert.deepEqual(byId(r, "suv").gates, []);       // compact_suv matches suv
+  assert.deepEqual(byId(r, "unknown").gates, []);
+  // No list in the profile = any body.
+  assert.deepEqual(byId(run([car({ id: "coupe", bodyStyle: "coupe" })]), "coupe").gates, []);
 });

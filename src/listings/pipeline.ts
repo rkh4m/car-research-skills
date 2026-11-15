@@ -17,7 +17,7 @@ export const toVehicleInput = (l: NormalizedListing, b: Baseline | null | undefi
   id: l.id,
   year: l.year, make: l.make, model: l.model, trim: l.trim, condition: l.condition,
   price: l.price, feesTotal: l.feesTotal, mileage: l.mileage, distanceMi: l.distanceMi,
-  fuelType: l.fuelType ?? "gas", mpg: l.mpg, url: l.sources[0]?.url, vin: l.vin,
+  bodyStyle: l.bodyStyle, fuelType: l.fuelType ?? "gas", mpg: l.mpg, url: l.sources[0]?.url, vin: l.vin,
   market: { baseline: b?.baseline, comps: b?.comps ?? 0, msrp: l.msrp },
   listing: { daysOnMarket: l.daysOnMarket, priceDrops: l.priceDrops },
   history: l.history,

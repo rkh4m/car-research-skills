@@ -23,6 +23,26 @@ const fuelType = (s: unknown): FuelType | undefined => {
   if (t.includes("diesel")) return "diesel";
   return "gas";
 };
+export type BodyStyle = "sedan" | "hatchback" | "coupe" | "convertible" | "wagon" | "suv" | "truck" | "van";
+/**
+ * Canonical body style from any source's free-text fields, most specific first (e.g. Auto.dev's series
+ * "EX-T 2dr Coupe (1.5L 4cyl Turbo CVT)"). Generic values like "Car" or "Performance/Sports" are skipped.
+ * Door counts are not used: Auto.dev lists some 4-door sedans with doors = 2.
+ */
+export const bodyStyleOf = (...texts: unknown[]): BodyStyle | undefined => {
+  for (const x of texts) {
+    const t = String(x ?? "").toLowerCase();
+    if (/convertible|cabrio|roadster/.test(t)) return "convertible";
+    if (/coupe|coupé/.test(t)) return "coupe";
+    if (/hatch|liftback/.test(t)) return "hatchback";
+    if (/wagon|estate/.test(t)) return "wagon";
+    if (/sedan/.test(t)) return "sedan";
+    if (/\bsuv\b|crossover|sport utility/.test(t)) return "suv";
+    if (/pickup|truck|crew cab/.test(t)) return "truck";
+    if (/\bvan\b|minivan/.test(t)) return "van";
+  }
+  return undefined;
+};
 const today = () => new Date().toISOString().slice(0, 10);
 const listingsOf = (payload: any): any[] => (Array.isArray(payload) ? payload : payload?.listings ?? payload?.vehicles ?? []);
 
@@ -45,7 +65,7 @@ export const fromCarGurus = (payload: unknown, observedAt = today()): RawListing
         price: base, feesTotal: fees, mileage: miles(d.mileage?.displayValue) ?? 0,
         dealer: { ...cityState(d.dealerLocation), rating: typeof d.dealerRating === "number" ? Math.round(d.dealerRating * 100) / 100 : undefined },
         reportedDistanceMi: miles(d.dealerDistance), trustedDistance: true,
-        bodyStyle: d.ontology.bodyTypeName, fuelType: fuelType(d.fuelEconomy?.fuelType),
+        bodyStyle: bodyStyleOf(d.ontology.bodyTypeName, d.ontology.trimName, d.title?.titleWithoutPrice), fuelType: fuelType(d.fuelEconomy?.fuelType),
         mpg: combinedMpg(d.fuelEconomy?.city, d.fuelEconomy?.highway),
         daysOnMarket: d.history?.daysOnCarGurus ?? d.history?.daysAtDealer,
         history: h.hasVehicleHistory ? {
@@ -61,7 +81,7 @@ export const fromCarGurus = (payload: unknown, observedAt = today()): RawListing
       source: "cargurus", sourceId: String(item.id), url: item.vdpUrl, observedAt,
       year: Number(title[1]), make: title[2]!, model: title[3]!,
       price, feesTotal: Math.max(0, (money(item.pricePlusFeesString) ?? price) - price),
-      mileage: item.mileage?.value ?? 0, dealer: cityState(item.dealerLocation),
+      mileage: item.mileage?.value ?? 0, dealer: cityState(item.dealerLocation), bodyStyle: bodyStyleOf(title[3]),
     }];
   });
 
@@ -92,7 +112,8 @@ export const fromAutoDev = (payload: unknown, observedAt = today(), assumedFees 
       price: r.price, feesTotal: assumedFees, mileage: r.miles ?? 0,
       dealer: { name: r.dealer, city: r.city, state: r.state, lat, lng },
       trustedDistance: false,
-      bodyStyle: v.style ?? v.bodyStyle, fuelType: fuelType(v.fuel),
+      // series ("EX-T 2dr Coupe …") is the most specific field; the trim field alone ("EX-T") hides the body.
+      bodyStyle: bodyStyleOf(v.series, v.style, v.type, v.bodyStyle), fuelType: fuelType(v.fuel),
       history: h ? {
         source: "listing", accidents: typeof h.accidentCount === "number" ? h.accidentCount : undefined,
         // Auto.dev sometimes reports 0 owners (no title records yet); a used car has at least one, so treat as unknown.
@@ -123,7 +144,7 @@ export const fromDealerDirect = (payload: unknown, observedAt = today()): RawLis
       mileage: x.mileage ?? 0,
       dealer: { name: x.dealer_name, city: x.dealer_city, state: x.dealer_state, lat: x.lat, lng: x.lng },
       reportedDistanceMi: typeof x.distance_miles === "number" ? x.distance_miles : undefined, trustedDistance: false,
-      bodyStyle: x.body_style, fuelType: fuelType(x.fuel_type), mpg: combinedMpg(x.city_mpg, x.highway_mpg),
+      bodyStyle: bodyStyleOf(x.body_style, x.trim), fuelType: fuelType(x.fuel_type), mpg: combinedMpg(x.city_mpg, x.highway_mpg),
       flags,
     }];
   });

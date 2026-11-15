@@ -94,6 +94,7 @@ export const normalizeListings = (raws: RawListing[], opts: NormalizeOptions): N
       existing.msrp ??= r.msrp;
       existing.mpg ??= r.mpg;
       existing.fuelType ??= r.fuelType;
+      existing.bodyStyle ??= r.bodyStyle;
       if (!existing.history) existing.history = r.history;
       else if (r.history) {
         // Keep the first source's history but fill facts it lacks (e.g. Auto.dev knows fleet/rental use, CarGurus doesn't).
@@ -114,7 +115,7 @@ export const normalizeListings = (raws: RawListing[], opts: NormalizeOptions): N
       id: r.vin ? r.vin.toUpperCase() : `${r.source}:${r.sourceId}`,
       vin: r.vin, year: r.year, make: r.make, model: modelFamily(r.model), family: familyKey(r.make, r.model), trim: r.trim,
       condition, price: r.price, feesTotal: r.feesTotal ?? 0, msrp: r.msrp, mileage: r.mileage, distanceMi,
-      dealer: r.dealer, fuelType: r.fuelType, mpg: r.mpg, daysOnMarket: r.daysOnMarket, priceDrops: r.priceDrops,
+      dealer: r.dealer, bodyStyle: r.bodyStyle, fuelType: r.fuelType, mpg: r.mpg, daysOnMarket: r.daysOnMarket, priceDrops: r.priceDrops,
       history: r.history, sources: [ref], flags,
     });
   }

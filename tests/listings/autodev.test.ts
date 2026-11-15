@@ -67,3 +67,32 @@ test("distance comes from coordinates, so far-away rows are dropped", () => {
   assert.equal(b.listings.length, 1);
   assert.equal(b.dropped[0]?.reason, "outside_radius");
 });
+
+test("live case: body style comes from Auto.dev's series, so a coupe whose trim is just 'EX-T' is caught", async () => {
+  const { bodyStyleOf } = await import("../../src/listings/adapters.ts");
+  const coupe = row({ vehicle: { make: "Honda", model: "Civic", year: 2017, trim: "EX-T", style: "Coupe", type: "Coupe", bodyStyle: "Car", doors: 2,
+    series: "EX-T 2dr Coupe (1.5L 4cyl Turbo CVT)", fuel: "Gasoline" } });
+  assert.equal(fromAutoDev([coupe])[0]!.bodyStyle, "coupe");
+  assert.equal(fromAutoDev([row()])[0]!.bodyStyle, "sedan");
+  // Auto.dev lists some 4-door sedans with doors = 2 and generic types; the series still wins.
+  assert.equal(bodyStyleOf("LE 4dr Sedan (1.8L 4cyl CVT)", "Sedan", "Performance/Sports", "Car"), "sedan");
+  assert.equal(bodyStyleOf("i Sport 4dr Hatchback", "4dr Hatchback"), "hatchback");
+  assert.equal(bodyStyleOf("Car", "Performance/Sports"), undefined);
+});
+
+test("coupes are priced against coupes, not sedans", () => {
+  const origin = { lat: 38.9072, lng: -77.0369 };
+  const civic = (vin: string, body: string, price: number, mileage: number) => row({ vin,
+    vehicle: { make: "Honda", model: "Civic", year: 2017, trim: "EX-T", series: `EX-T ${body}`, fuel: "Gasoline" },
+    retailListing: { ...row().retailListing, price, miles: mileage } });
+  // Sedans around $19k, coupes around $15k at similar miles.
+  const raws = fromAutoDev([
+    ...[0, 1, 2, 3, 4, 5].map(i => civic(`SEDAN0000000000${i}`, "4dr Sedan", 19000 + i * 100, 50000 + i * 1000)),
+    ...[0, 1, 2, 3].map(i => civic(`COUPE0000000000${i}`, "2dr Coupe", 15000 + i * 100, 50000 + i * 1000)),
+  ]);
+  const b = buildCandidates(raws, { origin, radiusMi: 75 });
+  const target = b.candidates.find(c => c.vin === "COUPE00000000000")!;
+  assert.equal(target.bodyStyle, "coupe");
+  const baseline = target.market?.baseline;
+  assert.ok(baseline !== undefined && baseline < 16500, `coupe baseline ${baseline} should come from coupes, not $19k sedans`);
+});

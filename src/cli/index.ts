@@ -50,7 +50,8 @@ const normalize = (args: string[]) => {
   const dropReasons = b.dropped.reduce<Record<string, number>>((m, d) => ({ ...m, [d.reason]: (m[d.reason] ?? 0) + 1 }), {});
   const withBaseline = [...b.baselines.values()].filter(Boolean).length;
   console.log(`raw ${raws.length} → kept ${b.listings.length} (merged ${b.mergedCount} duplicates; dropped ${JSON.stringify(dropReasons)})`);
-  console.log(`price model: ${(b.priceModel.perTenKMiles * 100).toFixed(1)}%/10k mi, ${(b.priceModel.perModelYear * 100).toFixed(1)}%/model year (${b.priceModel.fitted ? `fitted on ${b.priceModel.n}` : "defaults"})`);
+  console.log(`price model: ${(b.priceModel.perTenKMiles * 100).toFixed(1)}%/10k mi, ${(b.priceModel.perModelYear * 100).toFixed(1)}%/model year (${b.priceModel.fitted ? `fitted on ${b.priceModel.n}` : "defaults"})`
+    + (b.priceModel.trimPremium ? `; trim premium vs base: mid +${(b.priceModel.trimPremium.mid * 100).toFixed(1)}%, upper +${(b.priceModel.trimPremium.upper * 100).toFixed(1)}%` : "; no trim premium fitted"));
   console.log(`baselines: ${withBaseline}/${b.listings.length} listings have ≥3 comps`);
   console.log(`wrote ${values.out}`);
 };

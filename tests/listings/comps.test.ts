@@ -75,3 +75,35 @@ test("too little data falls back to default sensitivities", () => {
   assert.equal(m.fitted, false);
   assert.equal(m.perTenKMiles, 0.04);
 });
+
+test("trim names map to rough equipment tiers", async () => {
+  const { trimTier } = await import("../../src/listings/comps.ts");
+  assert.equal(trimTier("i Sport"), "base");
+  assert.equal(trimTier("LE"), "base");
+  assert.equal(trimTier("SE FWD"), "base");
+  assert.equal(trimTier("Touring Hatchback"), "mid");
+  assert.equal(trimTier("EX"), "mid");
+  assert.equal(trimTier("i Grand Touring"), "upper");
+  assert.equal(trimTier("XLE"), "upper");
+  assert.equal(trimTier("EX-L"), "upper");
+  assert.equal(trimTier("Sedan FWD"), "base"); // live case: the unnamed base model looked like a bargain against named trims
+  assert.equal(trimTier(undefined), undefined);
+});
+
+test("live case: a base trim priced like other base trims is not scored as a bargain against upper trims", () => {
+  // Same market, but every listing comes in three trims: base, mid (+5%) and upper (+12%).
+  const PREMIUM = { LE: 1, EX: 1.05, Limited: 1.12 } as const;
+  const raws = market().flatMap(r => (Object.keys(PREMIUM) as Array<keyof typeof PREMIUM>).map((trim, k) =>
+    ({ ...r, sourceId: `${r.sourceId}-${trim}`, trim, mileage: r.mileage + 7 * (k + 1), price: Math.round(r.price * PREMIUM[trim]) })));
+  const target = raw({ sourceId: "target", make: "Toyota", model: "Corolla", year: 2018, mileage: 84000, trim: "LE", price: Math.round(truePrice(16000, 2018, 84000)), feesTotal: 0 });
+  const listings = listingsOf([...raws, target]);
+  const model = fitPriceModel(listings);
+  assert.ok(model.trimPremium, "trim premium fitted");
+  assert.ok(Math.abs(model.trimPremium!.mid - 0.05) < 0.01, `mid ${model.trimPremium!.mid}`);
+  assert.ok(Math.abs(model.trimPremium!.upper - 0.12) < 0.01, `upper ${model.trimPremium!.upper}`);
+  const fair = truePrice(16000, 2018, 84000);
+  const aware = computeBaselines(listings, model).get("user:target")!.baseline;
+  const blind = computeBaselines(listings, { ...model, trimPremium: undefined }).get("user:target")!.baseline;
+  assert.ok(Math.abs(aware - fair) / fair < 0.02, `trim-aware baseline ${aware} vs fair ${fair}`);
+  assert.ok(blind > aware * 1.03, `trim-blind baseline ${blind} overstates the base car's market price`);
+});

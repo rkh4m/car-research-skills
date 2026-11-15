@@ -24,7 +24,7 @@ export interface RawListing {
   /** Distance as the source reported it. Only used when `trustedDistance` is true and no coordinates exist. */
   reportedDistanceMi?: number;
   trustedDistance?: boolean;
-  bodyStyle?: string;
+  bodyStyle?: import("./adapters.ts").BodyStyle;
   fuelType?: FuelType;
   mpg?: number;
   daysOnMarket?: number;
@@ -60,6 +60,7 @@ export interface NormalizedListing {
   mileage: number;
   distanceMi?: number;
   dealer?: RawListing["dealer"];
+  bodyStyle?: RawListing["bodyStyle"];
   fuelType?: FuelType;
   mpg?: number;
   daysOnMarket?: number;

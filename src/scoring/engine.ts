@@ -52,6 +52,12 @@ const ratingFor = (sc: Scorecard, overall: number) =>
   overall >= sc.rating_bands.excellent ? "excellent" : overall >= sc.rating_bands.strong ? "strong"
     : overall >= sc.rating_bands.acceptable ? "acceptable" : "below shortlist floor";
 
+/** undefined when the profile has no body-style list or the listing's body is unknown (never excludes on missing data). */
+const bodyStyleWanted = (v: VehicleRecord, p: BuyerProfile): boolean | undefined => {
+  const wanted = (p.needs.body_styles ?? []).map(s => s.toLowerCase().replace(/^(compact|midsize|full_?size)_/, ""));
+  return wanted.length && v.bodyStyle ? wanted.includes(v.bodyStyle) : undefined;
+};
+
 const vehicleFacts = (v: VehicleRecord, p: BuyerProfile, ctx: RunContext): Facts => {
   const h = v.history;
   const missingMustHave = p.needs.must_have.filter(f => !v.features.includes(f)).length;
@@ -84,6 +90,7 @@ const vehicleFacts = (v: VehicleRecord, p: BuyerProfile, ctx: RunContext): Facts
     vin_year_mismatch: v.vinCheck ? !v.vinCheck.yearMatches : undefined,
     vin_model_mismatch: v.vinCheck ? !v.vinCheck.modelMatches : undefined,
     missing_must_have_count: missingMustHave,
+    body_style_wanted: bodyStyleWanted(v, p),
     model_age_years: modelAgeYears(v.year, ctx.runDate),
     run_month: ctx.runDate.getUTCMonth() + 1,
     days_on_market: v.listing.daysOnMarket,
@@ -118,7 +125,9 @@ const scoreDeal = (sc: Scorecard, v: VehicleRecord, facts: Facts, flags: string[
   }
   if (pct === undefined) return unknown(sc, "no market baseline or MSRP");
   const p0 = pct;
-  let score = cfg.bands.find(b => p0 >= b.min)?.score ?? cfg.bands[cfg.bands.length - 1]!.score;
+  let score = cfg.interpolate
+    ? Math.round(interpolateCurve([...cfg.bands].sort((a, b) => a.min - b.min).map(b => [b.min, b.score] as [number, number]), p0))
+    : cfg.bands.find(b => p0 >= b.min)?.score ?? cfg.bands[cfg.bands.length - 1]!.score;
   for (const m of cfg.modifiers) if (tryEvaluate(m.when, facts)) { score += m.add ?? 0; if (m.note) notes.push(m.note); }
   for (const r of cfg.red_flags) if (r.flag && tryEvaluate(r.when, facts)) flags.push(r.flag);
   const dir = pct >= 0 ? "under" : "over";
