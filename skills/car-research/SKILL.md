@@ -73,6 +73,7 @@ Read the buyer profile if one is given (YAML matching `config/buyer-profile.exam
    - Read `deal.rating`. **"NA" is a warning, not missing data.** Check `deal.noDealRatingReason`. A theft or title reason excludes the car (scorecard gate `theft_on_history`). No reason given usually means the listing was pulled; treat the car as possibly sold.
    - Confirm it on the **dealer's own inventory page** in the browser (read-only; browsing rules below apply). If it's gone, say so and drop it. If the dealer site can't be checked, write "availability not confirmed on dealer site".
    - Label each pick in the report: "**Verified available <date> (dealer site)**", "listed on <source> <date>, dealer site not checked", or "possibly sold".
+   - **When reading any history report (Carfax/AutoCheck), check the odometer before anything else:** compare the listing's mileage with the last few odometer readings and read the report's "Odometer Check" line. A listing below an earlier reading, or "Inconsistent mileage indicated", sets `odometer_rollback_suspected` (hard gate) until the dealer documents the true mileage. In a live run, a dealer listed 41,243 mi on a car the Virginia DMV had recorded at 109,358 three weeks earlier; the summary (no accidents, clean title, "great value") looked perfect.
    - Never recommend a backup you haven't rechecked. In a live run, a recommended backup turned out to have a theft on its record; its missing deal rating was the clue.
 13. **Deliver the report** (format below).
 

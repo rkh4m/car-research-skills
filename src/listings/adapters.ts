@@ -125,11 +125,18 @@ export const fromAutoDev = (payload: unknown, observedAt = today(), assumedFees 
     }];
   });
 
-/** Dealer-Direct MCP `search_inventory` vehicles. Its distance_miles is unreliable, so coordinates are kept instead. */
-export const fromDealerDirect = (payload: unknown, observedAt = today()): RawListing[] =>
+/**
+ * Dealer-Direct MCP `search_inventory` vehicles. Its distance_miles is unreliable, so coordinates are kept instead.
+ * About half the vehicles have no fee breakdown (dealer_fees_total_usd null); those get `assumedFees` and the
+ * `fees_assumed` flag rather than a stated $0, so a car never looks cheaper just because its fees are unlisted.
+ */
+export const fromDealerDirect = (payload: unknown, observedAt = today(), assumedFees = 0): RawListing[] =>
   listingsOf(payload).flatMap((x: any): RawListing[] => {
     const msrp = typeof x?.msrp === "number" && x.msrp > 0 ? x.msrp : undefined;
     const flags: string[] = [];
+    const statedFees = x?.fee_breakdown?.dealer_fees_total_usd;
+    const feesKnown = typeof statedFees === "number";
+    if (!feesKnown) flags.push("fees_assumed");
     let prices = [x?.price, x?.our_price].filter((p): p is number => typeof p === "number" && p > 0);
     if (msrp) {
       const kept = prices.filter(p => p >= 0.5 * msrp);
@@ -142,7 +149,7 @@ export const fromDealerDirect = (payload: unknown, observedAt = today()): RawLis
       source: "dealer_direct", sourceId: String(x.id ?? x.vin), url: x.source_url, observedAt,
       vin: x.vin, year: x.year, make: x.make, model: x.model, trim: x.trim,
       condition: x.certified ? "cpo" : cond === "new" ? "new" : cond === "used" ? "used" : cond.includes("cert") ? "cpo" : undefined,
-      price: Math.min(...prices), feesTotal: x.fee_breakdown?.dealer_fees_total_usd ?? 0, msrp,
+      price: Math.min(...prices), feesTotal: feesKnown ? statedFees : assumedFees, msrp,
       mileage: x.mileage ?? 0,
       dealer: { name: x.dealer_name, city: x.dealer_city, state: x.dealer_state, lat: x.lat, lng: x.lng },
       reportedDistanceMi: typeof x.distance_miles === "number" ? x.distance_miles : undefined, trustedDistance: false,

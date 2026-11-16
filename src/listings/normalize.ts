@@ -61,7 +61,14 @@ const choosePrice = (l: NormalizedListing) => {
   const fee = (s: SourceRef) => (s.feesAssumed && realFee !== undefined ? realFee : s.feesTotal);
   if (realFee !== undefined) l.flags = l.flags.filter(f => f !== "fees_assumed");
   const eff = (s: SourceRef) => s.price + fee(s);
-  const sorted = [...l.sources].sort((a, b) => eff(a) - eff(b));
+  // A source with assumed fees can't say whether its price already includes them (live case: Auto.dev listed
+  // $15,850 = the dealer's $15,050 + $800 fee, and adding the fee again made it look $1,600 dearer than CarGurus).
+  // So when any source states its fees, price from those sources only; assumed-fee prices are kept for reference.
+  const pool = stated.length ? stated : l.sources;
+  if (stated.length && l.sources.some(s => s.feesAssumed && Math.abs(eff(s) - eff(stated[0]!)) > (PRICE_CONFLICT_RATIO - 1) * eff(stated[0]!))) {
+    l.flags.push("assumed_fee_price_ignored");
+  }
+  const sorted = [...pool].sort((a, b) => eff(a) - eff(b));
   const low = sorted[0]!, high = sorted[sorted.length - 1]!;
   const pick = eff(high) > PRICE_CONFLICT_RATIO * eff(low) ? (l.flags.push("source_price_conflict"), high) : low;
   l.price = pick.price; l.feesTotal = fee(pick);
@@ -86,6 +93,9 @@ export const normalizeListings = (raws: RawListing[], opts: NormalizeOptions): N
       ...(r.flags?.includes("fees_assumed") ? { feesAssumed: true } : {}), observedAt: r.observedAt };
 
     const existing = listings.find(l => sameVehicle(l, r, tol));
+    // The same listing from the same source seen again (e.g. an older saved snapshot passed after a newer one):
+    // keep only the first copy, so callers list their newest files first and stale prices never win.
+    if (existing?.sources.some(s => s.source === r.source && s.sourceId === r.sourceId)) { mergedCount++; continue; }
     if (existing) {
       mergedCount++;
       existing.sources.push(ref);

@@ -61,6 +61,29 @@ test("live case: when the same VIN is also on a source that states fees, the sta
   assert.ok(solo.listings[0]!.flags.includes("fees_assumed"));
 });
 
+test("live case: a fee-inclusive Auto.dev price doesn't override the stated CarGurus price", () => {
+  // CarGurus: $14,250 + $800 stated fee. Auto.dev: $15,850, which already includes the $800 fee.
+  const stated = { source: "cargurus" as const, sourceId: "2", observedAt: "2026-11-16", vin: "2T1BURHE0KC000000", year: 2019, make: "Toyota",
+    model: "Corolla", price: 14250, feesTotal: 800, mileage: 97585, dealer: { lat: 38.9072, lng: -77.0369 } };
+  const ad = fromAutoDev([row({ retailListing: { ...row().retailListing, price: 15850 } })], "2026-11-16", 800);
+  const b = buildCandidates([stated, ...ad], { origin: { lat: 38.9072, lng: -77.0369 }, radiusMi: 75 });
+  const l = b.listings[0]!;
+  assert.equal(l.price, 14250);
+  assert.equal(l.feesTotal, 800);
+  assert.ok(!l.flags.includes("source_price_conflict"));
+  assert.ok(l.flags.includes("assumed_fee_price_ignored"));
+  // Both prices are still kept on the listing for reference.
+  assert.deepEqual(l.sources.map(s => s.price).sort(), [14250, 15850]);
+});
+
+test("stated-fee sources still resolve real conflicts between themselves", () => {
+  const a = { source: "cargurus" as const, sourceId: "3", observedAt: "2026-11-16", vin: "2T1BURHE0KC000009", year: 2019, make: "Toyota",
+    model: "Corolla", price: 12000, feesTotal: 800, mileage: 90000, dealer: { lat: 38.9072, lng: -77.0369 } };
+  const b = buildCandidates([a, { ...a, source: "dealer_direct" as const, sourceId: "d3", price: 14500 }], { origin: { lat: 38.9072, lng: -77.0369 }, radiusMi: 75 });
+  assert.equal(b.listings[0]!.price, 14500);
+  assert.ok(b.listings[0]!.flags.includes("source_price_conflict"));
+});
+
 test("distance comes from coordinates, so far-away rows are dropped", () => {
   const far = row({ vin: "2T1BURHE0KC000001", location: [-95.4, 29.9] });
   const b = buildCandidates(fromAutoDev([row(), far]), { origin: { lat: 38.9072, lng: -77.0369 }, radiusMi: 75 });
@@ -95,4 +118,14 @@ test("coupes are priced against coupes, not sedans", () => {
   assert.equal(target.bodyStyle, "coupe");
   const baseline = target.market?.baseline;
   assert.ok(baseline !== undefined && baseline < 16500, `coupe baseline ${baseline} should come from coupes, not $19k sedans`);
+});
+
+test("live case: an older snapshot of the same listing doesn't override the newer price", () => {
+  const today = { source: "cargurus" as const, sourceId: "900042", observedAt: "2026-11-16", vin: "SYNCAMRY000000042", year: 2014, make: "Toyota",
+    model: "Camry", price: 12107, feesTotal: 800, mileage: 97404, dealer: { lat: 38.9072, lng: -77.0369 } };
+  const lastWeek = { ...today, observedAt: "2026-11-12", price: 11700 };
+  const b = buildCandidates([today, lastWeek], { origin: { lat: 38.9072, lng: -77.0369 }, radiusMi: 75 });
+  assert.equal(b.listings.length, 1);
+  assert.equal(b.listings[0]!.price, 12107);
+  assert.equal(b.listings[0]!.sources.length, 1);
 });

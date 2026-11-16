@@ -16,6 +16,8 @@ import type { ScoreResult } from "../scoring/types.ts";
 
 const USAGE = `Usage:
   car-research normalize --origin <lat,lng> --radius <mi> [--cargurus <file.json>]... [--dealer-direct <file.json>]... [--auto-dev <file.json>]... [--auto-dev-fee <usd>] [--date YYYY-MM-DD] --out <candidates.json>
+      (pass the newest files first: a listing seen again in an older file is ignored;
+       --auto-dev-fee is also the assumed fee for Dealer-Direct cars that have no fee breakdown)
   car-research enrich --candidates <in.json> --out <out.json> [--date YYYY-MM-DD] [--cache-dir data/cache] [--no-wrench]
   car-research score --candidates <file.json> --profile <profile.yaml> --fuel <usd/gal> --apr <percent>
                      [--date YYYY-MM-DD] [--scorecard <scorecard.yaml>] [--sales <us-sales.yaml> | --no-sales] [--out <result.json>]`;
@@ -42,7 +44,7 @@ const normalize = (args: string[]) => {
   const observedAt = values.date ?? new Date().toISOString().slice(0, 10);
   const raws = [
     ...(values.cargurus ?? []).flatMap(f => fromCarGurus(readJson(f), observedAt)),
-    ...(values["dealer-direct"] ?? []).flatMap(f => fromDealerDirect(readJson(f), observedAt)),
+    ...(values["dealer-direct"] ?? []).flatMap(f => fromDealerDirect(readJson(f), observedAt, Number(values["auto-dev-fee"] ?? 0))),
     ...(values["auto-dev"] ?? []).flatMap(f => fromAutoDev(readJson(f), observedAt, Number(values["auto-dev-fee"] ?? 0))),
   ];
   const b = buildCandidates(raws, { origin: { lat: lat!, lng: lng! }, radiusMi: Number(values.radius) });

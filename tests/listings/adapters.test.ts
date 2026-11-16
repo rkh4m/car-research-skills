@@ -73,3 +73,12 @@ test("live case: a CarGurus theft title reaches the scorer and excludes the car"
   assert.deepEqual(res.ranked[0]!.gates, ["theft_on_history"]);
   assert.equal(res.shortlist.length, 0);
 });
+
+test("live case: Dealer-Direct with no fee breakdown gets the assumed fee, not a stated $0", () => {
+  const [unknown] = fromDealerDirect({ vehicles: [ddVehicle()] }, "2026-11-16", 800);
+  assert.equal(unknown!.feesTotal, 800);
+  assert.ok(unknown!.flags!.includes("fees_assumed"));
+  const [stated] = fromDealerDirect({ vehicles: [ddVehicle({ fee_breakdown: { dealer_fees_total_usd: 0 } })] }, "2026-11-16", 800);
+  assert.equal(stated!.feesTotal, 0); // a real $0 stays $0
+  assert.ok(!stated!.flags!.includes("fees_assumed"));
+});
