@@ -206,3 +206,23 @@ test("needs.body_styles excludes unwanted bodies but never excludes on an unknow
   // No list in the profile = any body.
   assert.deepEqual(byId(run([car({ id: "coupe", bodyStyle: "coupe" })]), "coupe").gates, []);
 });
+
+test("limits.min_reliability gates known low reliability, never unknown reliability", () => {
+  const cars = [
+    car({ id: "shaky", model: "Shaky", reliability: { complaints: 400, perYear: 60, crashFireInjuryPerYear: 3, severeShare: 0.9, recalls: 6 } }),
+    car({ id: "solid", model: "Solid", reliability: { complaints: 5, perYear: 1, crashFireInjuryPerYear: 0, severeShare: 0.2, recalls: 0 } }),
+    car({ id: "unknown", model: "Unknown", reliability: { complaints: 0, perYear: 0, crashFireInjuryPerYear: 0, severeShare: 0, recalls: 1 } }),
+  ];
+  const base = run(cars);
+  const shakyScore = byId(base, "shaky").criteria.reliability.score;
+  const solidScore = byId(base, "solid").criteria.reliability.score;
+  assert.ok(shakyScore < solidScore);
+  const min = Math.floor((shakyScore + solidScore) / 2) + 1;
+  const r = run(cars, { ...profile, limits: { ...(profile as any).limits, min_reliability: min } });
+  assert.ok(byId(r, "shaky").gates.includes("below_min_reliability"));
+  assert.equal(byId(r, "shaky").eligible, false);
+  assert.ok(!byId(r, "solid").gates.includes("below_min_reliability"));
+  assert.ok(!byId(r, "unknown").gates.includes("below_min_reliability"));
+  // Without the limit nothing is gated on reliability.
+  assert.ok(!byId(base, "shaky").gates.includes("below_min_reliability"));
+});

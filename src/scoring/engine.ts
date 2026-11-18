@@ -354,6 +354,10 @@ export const scoreCandidates = (sc: Scorecard, inputs: VehicleInput[], profileIn
     const confidence = Math.round(CRITERIA.reduce((s, id) => s + criteria[id].weight * criteria[id].known, 0)) / 100;
     const stretch = v.price > profile.budget.target_max;
     const blockers: string[] = [];
+    // Reliability is scored after the expression gates run, so its floor is applied here as a gate.
+    const minRel = profile.limits.min_reliability;
+    if (minRel !== undefined && criteria.reliability.known > 0 && criteria.reliability.score < minRel && !part.gates.includes("below_min_reliability"))
+      part.gates.push("below_min_reliability");
     if (overall < sc.shortlist.min_overall) blockers.push(`overall below ${sc.shortlist.min_overall}`);
     if (confidence < sc.confidence.min_for_shortlist) blockers.push(`confidence below ${sc.confidence.min_for_shortlist}`);
     if (stretch) {

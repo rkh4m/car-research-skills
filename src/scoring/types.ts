@@ -107,6 +107,8 @@ export const BuyerProfile = z.object({
     max_mileage: z.number().positive().default(130000),
     allow_branded_title: z.boolean().default(false),
     allow_structural_damage: z.boolean().default(false),
+    /** Exclude cars whose reliability criterion scores below this (0-100). Unknown reliability is not excluded. */
+    min_reliability: z.number().min(0).max(100).optional(),
   }).default({ max_mileage: 130000, allow_branded_title: false, allow_structural_damage: false }),
   needs: z.object({
     must_have: z.array(z.string()).default([]),
